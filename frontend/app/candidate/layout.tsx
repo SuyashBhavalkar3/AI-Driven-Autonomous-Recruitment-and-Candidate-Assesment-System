@@ -25,6 +25,7 @@ const navItems = [
   { name: "Jobs", href: "/candidate/jobs", icon: Search },
   { name: "Applications", href: "/candidate/applications", icon: FileText },
   { name: "Notifications", href: "/candidate/schedule", icon: Bell },
+  { name: "Profile", href: "/candidate/profile", icon: Settings },
 ];
 
 export default function CandidateLayout({

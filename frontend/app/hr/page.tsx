@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
-import { Briefcase, Users, CheckCircle, Clock, TrendingUp, PlusCircle } from "lucide-react";
+import { Briefcase, Users, CheckCircle, Clock, TrendingUp, PlusCircle, BarChart3 } from "lucide-react";
 
 const stats = [
   { label: "Active Jobs", value: "8", icon: Briefcase, color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-950/30" },
@@ -25,6 +25,20 @@ const recentApplicants = [
   { id: 3, name: "Mike Johnson", position: "Backend Developer", score: 85, status: "review" },
 ];
 
+const hiringFunnel = [
+  { stage: "Applied", count: 156, color: "bg-blue-500" },
+  { stage: "Screened", count: 98, color: "bg-purple-500" },
+  { stage: "Assessment", count: 54, color: "bg-indigo-500" },
+  { stage: "Interview", count: 28, color: "bg-violet-500" },
+  { stage: "Offer", count: 12, color: "bg-green-500" },
+];
+
+const monthlyHiring = [
+  { month: "Jan", hired: 3 },
+  { month: "Feb", hired: 5 },
+  { month: "Mar", hired: 4 },
+];
+
 const statusColors = {
   active: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
   interview: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
@@ -33,6 +47,9 @@ const statusColors = {
 };
 
 export default function HRDashboard() {
+  const maxHired = Math.max(...monthlyHiring.map(d => d.hired));
+  const maxFunnel = Math.max(...hiringFunnel.map(d => d.count));
+
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
@@ -64,6 +81,59 @@ export default function HRDashboard() {
             </CardContent>
           </Card>
         ))}
+      </div>
+
+      {/* Charts Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Hiring Funnel */}
+        <Card className="border-slate-200 dark:border-slate-800">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-slate-900 dark:text-white">Hiring Funnel</h3>
+              <BarChart3 className="h-5 w-5 text-blue-600" />
+            </div>
+            <div className="space-y-4">
+              {hiringFunnel.map((stage, index) => (
+                <div key={stage.stage}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm text-slate-600 dark:text-slate-400">{stage.stage}</span>
+                    <span className="text-sm font-medium text-slate-900 dark:text-white">{stage.count}</span>
+                  </div>
+                  <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3">
+                    <div 
+                      className={`${stage.color} h-3 rounded-full transition-all duration-500`}
+                      style={{ width: `${(stage.count / maxFunnel) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Monthly Hiring Trend */}
+        <Card className="border-slate-200 dark:border-slate-800">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-slate-900 dark:text-white">Monthly Hiring</h3>
+              <TrendingUp className="h-5 w-5 text-green-600" />
+            </div>
+            <div className="flex items-end justify-between gap-4 h-48">
+              {monthlyHiring.map((data) => (
+                <div key={data.month} className="flex-1 flex flex-col items-center gap-2">
+                  <div className="w-full flex flex-col items-center justify-end" style={{ height: '100%' }}>
+                    <span className="text-xs font-medium text-slate-900 dark:text-white mb-1">{data.hired}</span>
+                    <div 
+                      className="w-full bg-gradient-to-t from-green-500 to-emerald-400 rounded-t-lg transition-all duration-500"
+                      style={{ height: `${(data.hired / maxHired) * 100}%`, minHeight: '20px' }}
+                    />
+                  </div>
+                  <span className="text-sm text-slate-600 dark:text-slate-400">{data.month}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

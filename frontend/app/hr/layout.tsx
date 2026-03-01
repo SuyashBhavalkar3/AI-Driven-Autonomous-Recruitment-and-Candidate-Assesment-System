@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Briefcase, Users, PlusCircle, LogOut, Menu, X, Home, HelpCircle } from "lucide-react";
+import { Briefcase, Users, PlusCircle, LogOut, Menu, X, Home, HelpCircle, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,7 @@ const navItems = [
   { name: "Jobs", href: "/hr/jobs", icon: Briefcase },
   { name: "Applicants", href: "/hr/applicants", icon: Users },
   { name: "Questions", href: "/hr/questions", icon: HelpCircle },
+  { name: "Profile", href: "/hr/profile", icon: Settings },
 ];
 
 export default function HRLayout({ children }: { children: React.ReactNode }) {
