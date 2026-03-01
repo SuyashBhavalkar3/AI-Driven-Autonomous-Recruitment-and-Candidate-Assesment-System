@@ -103,7 +103,7 @@ export default function Home() {
                   whileTap={{ scale: 0.95 }}
                 >
                   <Button size="lg" asChild>
-                    <Link href="/register">
+                    <Link href="/register?type=hr">
                       For HR <ArrowRight className="ml-2 h-4 w-4" />
                     </Link>
                   </Button>
@@ -113,7 +113,7 @@ export default function Home() {
                   whileTap={{ scale: 0.95 }}
                 >
                   <Button size="lg" variant="outline" asChild>
-                    <Link href="/register">
+                    <Link href="/register?type=candidate">
                       For Candidates <ArrowRight className="ml-2 h-4 w-4" />
                     </Link>
                   </Button>

@@ -6,19 +6,92 @@ import { Label } from "@/components/ui/label";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useState } from "react";
-import { Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Mail, Lock, AlertCircle, Loader2 } from "lucide-react";
+import { authApi } from "@/lib/api";
+import * as z from "zod";
+
+const loginSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(1, "Password is required"),
+  userType: z.enum(["hr", "candidate"], { message: "Please select a user type" }),
+});
+
+type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
+  const router = useRouter();
+  
+  const [formData, setFormData] = useState<LoginFormData>({
+    email: "",
+    password: "",
+    userType: "candidate",
+  });
   const [isLoading, setIsLoading] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Partial<Record<keyof LoginFormData, string>>>({});
+  const [showPassword, setShowPassword] = useState(false);
+
+  const validateForm = (): boolean => {
+    try {
+      loginSchema.parse(formData);
+      setErrors({});
+      return true;
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        const newErrors: Partial<Record<keyof LoginFormData, string>> = {};
+        err.issues.forEach((error) => {
+          const path = error.path[0] as keyof LoginFormData;
+          newErrors[path] = error.message;
+        });
+        setErrors(newErrors);
+      }
+      return false;
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+    if (errors[name as keyof LoginFormData]) {
+      setErrors((prev) => ({
+        ...prev,
+        [name]: undefined,
+      }));
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
+
+    if (!validateForm()) {
+      return;
+    }
+
     setIsLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setIsLoading(false);
+    try {
+      const response = await authApi.login({
+        email: formData.email,
+        password: formData.password,
+        is_employer: formData.userType === "hr",
+      });
+
+      // Store token and user type
+      localStorage.setItem("access_token", response.access_token);
+      localStorage.setItem("user_type", formData.userType);
+
+      // Redirect to appropriate dashboard
+      const dashboardPath = formData.userType === "hr" ? "/hr" : "/candidate";
+      router.push(dashboardPath);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Login failed. Please check your credentials.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -116,32 +189,48 @@ export default function LoginPage() {
                 Sign in to your account
               </h2>
               <p className="text-slate-600 dark:text-slate-400">
-                Welcome back! Please enter your work email and password.
+                Welcome back! Please enter your credentials.
               </p>
             </motion.div>
 
+            {/* Error Alert */}
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 flex items-start gap-2"
+              >
+                <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+              </motion.div>
+            )}
+
             {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-4">
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
               >
                 <Label htmlFor="email" className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">
-                  Work email
+                  Email Address
                 </Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                   <Input
                     id="email"
+                    name="email"
                     type="email"
-                    placeholder="name@company.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10 h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl"
+                    placeholder="name@example.com"
+                    value={formData.email}
+                    onChange={handleInputChange}
+                    className="pl-10 h-11 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg"
                     required
                   />
                 </div>
+                {errors.email && (
+                  <p className="text-sm text-red-600 dark:text-red-400">{errors.email}</p>
+                )}
               </motion.div>
 
               <motion.div
@@ -164,21 +253,54 @@ export default function LoginPage() {
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                   <Input
                     id="password"
-                    type="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
                     placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10 h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl"
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    className="pl-10 pr-10 h-11 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg"
                     required
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-sm"
+                  >
+                    {showPassword ? "Hide" : "Show"}
+                  </button>
                 </div>
+                {errors.password && (
+                  <p className="text-sm text-red-600 dark:text-red-400">{errors.password}</p>
+                )}
               </motion.div>
 
-              {/* Remember me */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4 }}
+              >
+                <Label htmlFor="userType" className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">
+                  I am a
+                </Label>
+                <select
+                  id="userType"
+                  name="userType"
+                  value={formData.userType}
+                  onChange={handleInputChange}
+                  className="w-full h-11 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:border-indigo-500 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                >
+                  <option value="candidate">Candidate</option>
+                  <option value="hr">HR / Recruiter</option>
+                </select>
+                {errors.userType && (
+                  <p className="text-sm text-red-600 dark:text-red-400">{errors.userType}</p>
+                )}
+              </motion.div>
+              {/* Remember me */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
                 className="flex items-center"
               >
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -194,12 +316,12 @@ export default function LoginPage() {
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5 }}
+                transition={{ delay: 0.6 }}
               >
                 <Button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full h-12 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-medium rounded-xl shadow-lg shadow-indigo-600/25 hover:shadow-xl hover:shadow-indigo-600/30 transition-all duration-200"
+                  className="w-full h-11 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-medium rounded-lg shadow-lg shadow-indigo-600/25 hover:shadow-xl hover:shadow-indigo-600/30 transition-all duration-200"
                 >
                   {isLoading ? (
                     <>
@@ -207,9 +329,7 @@ export default function LoginPage() {
                       Signing in...
                     </>
                   ) : (
-                    <>
-                      Sign in <ArrowRight className="ml-2 h-4 w-4" />
-                    </>
+                    "Sign In"
                   )}
                 </Button>
               </motion.div>
@@ -218,12 +338,12 @@ export default function LoginPage() {
               <motion.p
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.6 }}
+                transition={{ delay: 0.7 }}
                 className="text-center text-sm text-slate-600 dark:text-slate-400"
               >
-                Don't have an account?{" "}
+                Don't have an account?{' '}
                 <Link
-                  href="/register"
+                  href={`/register?type=${formData.userType}`}
                   className="text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 font-medium"
                 >
                   Sign up
