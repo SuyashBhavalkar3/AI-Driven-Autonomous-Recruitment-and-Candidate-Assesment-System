@@ -1,7 +1,7 @@
 // app/candidate/layout.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
@@ -19,6 +19,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
+import { logout, getUserData, getAuthToken } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/api";
 
 const navItems = [
   { name: "Dashboard", href: "/candidate", icon: Home },
@@ -35,6 +37,22 @@ export default function CandidateLayout({
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
+  const [userData, setUserData] = useState<any>(null);
+
+  useEffect(() => {
+    const loadUserData = async () => {
+      const token = getAuthToken();
+      if (token) {
+        try {
+          const user = await getCurrentUser(token);
+          setUserData(user);
+        } catch (error) {
+          console.error('Failed to load user data:', error);
+        }
+      }
+    };
+    loadUserData();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
@@ -103,13 +121,13 @@ export default function CandidateLayout({
               </Avatar>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                  John Doe
+                  {userData?.name || 'Loading...'}
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                  john@example.com
+                  {userData?.email || ''}
                 </p>
               </div>
-              <Button variant="ghost" size="icon" className="text-slate-500">
+              <Button variant="ghost" size="icon" className="text-slate-500" onClick={logout}>
                 <LogOut className="h-4 w-4" />
               </Button>
             </div>

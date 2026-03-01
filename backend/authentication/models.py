@@ -10,6 +10,7 @@ class Employer(Base):
     name = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=False, index=True)
     hashed_password = Column(String, nullable=False)
+    company = Column(String, nullable=True)  # Company name for HR
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

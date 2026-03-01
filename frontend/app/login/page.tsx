@@ -3,22 +3,43 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useState } from "react";
-import { Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Mail, Lock, ArrowRight, Loader2, AlertCircle } from "lucide-react";
+import { loginUser } from "@/lib/api";
+import { setAuthToken, setUserRole } from "@/lib/auth";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState<'hr' | 'candidate'>('candidate');
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setIsLoading(false);
+    setError(null);
+
+    try {
+      const authResponse = await loginUser({
+        email,
+        password,
+        role,
+      });
+
+      setAuthToken(authResponse.access_token);
+      setUserRole(role);
+
+      router.push(role === 'hr' ? '/hr' : '/candidate');
+    } catch (err: any) {
+      setError(err.message || 'Login failed. Please check your credentials.');
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -122,6 +143,13 @@ export default function LoginPage() {
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-6">
+              {error && (
+                <div className="p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-600" />
+                  <p className="text-sm text-red-800 dark:text-red-400">{error}</p>
+                </div>
+              )}
+              
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -172,6 +200,26 @@ export default function LoginPage() {
                     required
                   />
                 </div>
+              </motion.div>
+
+              {/* Role Selection */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.35 }}
+              >
+                <Label htmlFor="role" className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">
+                  I am a
+                </Label>
+                <Select value={role} onValueChange={(value: 'hr' | 'candidate') => setRole(value)}>
+                  <SelectTrigger className="h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="candidate">Candidate</SelectItem>
+                    <SelectItem value="hr">HR / Recruiter</SelectItem>
+                  </SelectContent>
+                </Select>
               </motion.div>
 
               {/* Remember me */}

@@ -14,8 +14,8 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { useState, useCallback, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
-import { useForm, useFieldArray, Controller } from "react-hook-form";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { 
@@ -23,16 +23,13 @@ import {
   Mail, 
   Lock, 
   User, 
-  Calendar, 
-  Building, 
-  Briefcase,
-  Upload,
-  X,
-  CheckCircle,
-  FileText,
+  Building,
+  ChevronRight,
   Loader2,
-  ChevronRight
+  AlertCircle
 } from "lucide-react";
+import { registerUser, loginUser } from "@/lib/api";
+import { setAuthToken, setUserRole, setUserData } from "@/lib/auth";
 
 // Define validation schema with Zod
 const formSchema = z
@@ -60,14 +57,14 @@ type FormData = z.infer<typeof formSchema>;
 
 export default function RegisterPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const roleFromUrl = searchParams.get('role') as 'candidate' | 'hr' | null;
   
   const [showPassword, setShowPassword] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 2;
-  
-  // Resume upload state
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const {
     register,
@@ -117,14 +114,37 @@ export default function RegisterPage() {
     }
   };
 
-  const onSubmit = (data: FormData) => {
+  const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
-    console.log("Form data:", data);
-    // Redirect based on role
-    if (data.role === "hr") {
-      window.location.href = "/hr";
-    } else {
-      window.location.href = "/candidate";
+    setError(null);
+    
+    try {
+      // Register user
+      const userData = await registerUser({
+        fullName: data.fullName,
+        email: data.email,
+        password: data.password,
+        role: data.role,
+        company: data.company,
+      });
+
+      // Auto-login after registration
+      const authResponse = await loginUser({
+        email: data.email,
+        password: data.password,
+        role: data.role,
+      });
+
+      // Store auth data
+      setAuthToken(authResponse.access_token);
+      setUserRole(data.role);
+      setUserData(userData);
+
+      // Redirect to appropriate dashboard
+      router.push(data.role === 'hr' ? '/hr' : '/candidate');
+    } catch (err: any) {
+      setError(err.message || 'Registration failed. Please try again.');
+      setIsSubmitting(false);
     }
   };
 
@@ -262,6 +282,13 @@ export default function RegisterPage() {
             </div>
 
             <form onSubmit={handleSubmit(onSubmit)}>
+              {error && (
+                <div className="mb-4 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-600" />
+                  <p className="text-sm text-red-800 dark:text-red-400">{error}</p>
+                </div>
+              )}
+              
               <AnimatePresence mode="wait">
                 {/* Step 1: Account Details */}
                 {currentStep === 1 && (
