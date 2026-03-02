@@ -11,4 +11,5 @@ class User(Base):
     email = Column(String, unique=True, nullable=False, index=True)
     hashed_password = Column(String, nullable=False)
     is_employer = Column(Boolean, default=False, nullable=False)
+    company = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

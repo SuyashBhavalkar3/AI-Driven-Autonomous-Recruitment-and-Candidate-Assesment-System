@@ -6,14 +6,13 @@ export interface RegisterData {
   fullName: string;
   email: string;
   password: string;
-  role: 'hr' | 'candidate';
+  is_employer: boolean;
   company?: string;
 }
 
 export interface LoginData {
   email: string;
   password: string;
-  role: 'hr' | 'candidate';
 }
 
 export interface AuthResponse {
@@ -25,6 +24,7 @@ export interface UserData {
   id: number;
   name: string;
   email: string;
+  is_employer: boolean;
   company?: string;
   created_at: string;
 }
@@ -35,7 +35,13 @@ export async function registerUser(data: RegisterData): Promise<UserData> {
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(data),
+    body: JSON.stringify({
+      name: data.fullName,
+      email: data.email,
+      password: data.password,
+      is_employer: data.is_employer,
+      ...(data.company && { company: data.company }),
+    }),
   });
 
   if (!response.ok) {

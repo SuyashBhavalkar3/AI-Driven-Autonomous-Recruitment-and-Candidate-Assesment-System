@@ -6,7 +6,7 @@ from typing import Union
 from .database import get_db
 from .models import User
 from .schemas import UserCreate, LoginRequest, Token, UserOut
-from .utils import get_password_hash, verify_password, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
+from .utils import get_password_hash, verify_password, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, get_current_user
 
 router = APIRouter()
 
@@ -31,7 +31,8 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
         name=user_in.name,
         email=user_in.email,
         hashed_password=hashed_password,
-        is_employer=user_in.is_employer
+        is_employer=user_in.is_employer,
+        company=user_in.company if user_in.is_employer else None
     )
     
     db.add(user)
@@ -44,7 +45,8 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
 @router.post("/login", response_model=Token)
 def login(user_in: LoginRequest, db: Session = Depends(get_db)):
     """
-    Login a user based on their email and verify the is_employer flag matches.
+    Login a user based on their email and password.
+    If is_employer is provided, verify it matches the user's stored role.
     """
     
     # Search for user by email
@@ -56,10 +58,18 @@ def login(user_in: LoginRequest, db: Session = Depends(get_db)):
     if not verify_password(user_in.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
-    # Verify the is_employer flag matches
-    if user.is_employer != user_in.is_employer:
+    # Verify the is_employer flag matches (only if provided)
+    if user_in.is_employer is not None and user.is_employer != user_in.is_employer:
         raise HTTPException(status_code=401, detail="Invalid role for this email")
     
     access_token = create_access_token(user_id=user.id, is_employer=user.is_employer)
     
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.get("/me", response_model=UserOut)
+def get_current_user_endpoint(current_user: User = Depends(get_current_user)):
+    """
+    Get current authenticated user's profile information.
+    """
+    return current_user

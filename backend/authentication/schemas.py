@@ -8,12 +8,13 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     is_employer: bool  # True for employer, False for candidate (from checkbox)
+    company: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
-    is_employer: bool  # To specify user role
+    is_employer: Optional[bool] = None  # Optional - will fetch from user record if not provided
 
 
 class Token(BaseModel):
@@ -31,6 +32,7 @@ class UserOut(BaseModel):
     name: str
     email: EmailStr
     is_employer: bool
+    company: Optional[str] = None
     created_at: datetime
 
     class Config:

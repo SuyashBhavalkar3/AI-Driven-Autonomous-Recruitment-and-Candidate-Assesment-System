@@ -3,10 +3,10 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { useState, useCallback, useEffect } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -20,8 +20,9 @@ import {
   Loader2,
   AlertCircle
 } from "lucide-react";
-import { registerUser, loginUser } from "@/lib/api";
-import { setAuthToken, setUserRole, setUserData } from "@/lib/auth";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { registerUser, loginUser, getCurrentUser } from "@/lib/api";
+import { setAuthToken, setIsEmployer, setUserData } from "@/lib/auth";
 
 // Define validation schema with Zod
 const formSchema = z
@@ -29,18 +30,18 @@ const formSchema = z
     fullName: z.string().min(2, "Full name must be at least 2 characters"),
     email: z.string().email("Invalid email address"),
     password: z.string().min(8, "Password must be at least 8 characters"),
-    role: z.enum(["candidate", "hr"]),
+    is_employer: z.boolean(),
     company: z.string().optional(),
   })
   .refine(
     (data) => {
-      if (data.role === "hr" && !data.company) {
+      if (data.is_employer && !data.company) {
         return false;
       }
       return true;
     },
     {
-      message: "Company name is required for HR",
+      message: "Company name is required for recruiters",
       path: ["company"],
     }
   );
@@ -48,10 +49,7 @@ const formSchema = z
 type FormData = z.infer<typeof formSchema>;
 
 export default function RegisterPage() {
-  const searchParams = useSearchParams();
   const router = useRouter();
-  const roleFromUrl = searchParams.get('role') as 'candidate' | 'hr' | null;
-  
   const [showPassword, setShowPassword] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 2;
@@ -63,25 +61,20 @@ export default function RegisterPage() {
     control,
     handleSubmit,
     watch,
-    formState: { errors, isValid },
+    formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(formSchema),
-    mode: "onChange",
+    mode: "onBlur",
     defaultValues: {
       fullName: "",
       email: "",
       password: "",
-      role: roleFromUrl || "candidate",
+      is_employer: false,
       company: "",
     },
   });
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [errors, setErrors] =
-    useState<Partial<Record<keyof RegisterFormData, string>>>({});
-  const [showPassword, setShowPassword] = useState(false);
 
-  const selectedRole = watch("role");
+  const selectedIsEmployer = watch("is_employer");
   const formValues = watch();
 
   // Check if current step is valid
@@ -90,12 +83,18 @@ export default function RegisterPage() {
       case 1:
         return formValues.fullName && formValues.email && formValues.password;
       case 2:
-        if (selectedRole === "hr") {
+        if (selectedIsEmployer) {
           return formValues.company && formValues.company.trim() !== "";
         }
         return true;
       default:
         return false;
+    }
+  };
+
+  const prevStep = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
     }
   };
 
@@ -105,33 +104,17 @@ export default function RegisterPage() {
     }
   };
 
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
-  ) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-    if (errors[name as keyof RegisterFormData]) {
-      setErrors((prev) => ({
-        ...prev,
-        [name]: undefined,
-      }));
-    }
-  };
-
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
     setError(null);
     
     try {
       // Register user
-      const userData = await registerUser({
+      await registerUser({
         fullName: data.fullName,
         email: data.email,
         password: data.password,
-        role: data.role,
+        is_employer: data.is_employer,
         company: data.company,
       });
 
@@ -139,26 +122,45 @@ export default function RegisterPage() {
       const authResponse = await loginUser({
         email: data.email,
         password: data.password,
-        role: data.role,
       });
+
+      // Fetch user info to confirm is_employer
+      const userInfo = await getCurrentUser(authResponse.access_token);
 
       // Store auth data
       setAuthToken(authResponse.access_token);
-      setUserRole(data.role);
-      setUserData(userData);
+      setIsEmployer(userInfo.is_employer);
+      setUserData(userInfo);
 
       // Redirect to appropriate dashboard
-      router.push(data.role === 'hr' ? '/hr' : '/candidate');
+      router.push(userInfo.is_employer ? '/hr' : '/candidate');
     } catch (err: any) {
       setError(err.message || 'Registration failed. Please try again.');
       setIsSubmitting(false);
     }
   };
 
-  const heading = isEmployerDefault ? "Sign up as HR" : "Create your account";
-  const description = isEmployerDefault
-    ? "Fill in the details below to start posting jobs."
-    : "Let us know who you are so we can get you started.";
+  const handleFormSubmit = (data: FormData) => {
+    // Only submit if we're on the final step
+    if (currentStep === totalSteps) {
+      onSubmit(data);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Prevent form submission via Enter key before the final step
+    if (e.key === "Enter" && currentStep < totalSteps) {
+      e.preventDefault();
+    }
+  };
+
+  const heading = selectedIsEmployer ? "Sign up as Recruiter" : "Create your account";
+  const description =
+    currentStep === 1
+      ? "Enter your details to get started"
+      : selectedIsEmployer
+      ? "Tell us about your company"
+      : "Select your account type";
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex items-center justify-center p-4">
@@ -210,19 +212,19 @@ export default function RegisterPage() {
                   </div>
                   <div className="flex-1">
                     <p className={`text-sm font-medium ${currentStep >= 2 ? 'text-white' : 'text-white/60'}`}>
-                      Role selection
+                      Account type
                     </p>
                   </div>
                 </div>
               </div>
 
-              {/* Testimonial - social proof [citation:5] */}
+              {/* Testimonial - social proof */}
               <div className="pt-6 border-t border-white/20">
                 <p className="text-white/80 text-sm italic">
                   "HireFlow helped us reduce time-to-hire by 40% while finding better-qualified candidates."
                 </p>
                 <p className="text-white/60 text-xs mt-2">
-                  — Naav lihaa konacha
+                  — Hiring Manager, Tech Startup
                 </p>
               </div>
             </div>
@@ -246,12 +248,11 @@ export default function RegisterPage() {
                 {heading}
               </h2>
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                {currentStep === 1 && "Create your account"}
-                {currentStep === 2 && "Select your role"}
+                {description}
               </p>
-            </div>
+            </motion.div>
 
-            <form onSubmit={handleSubmit(onSubmit)}>
+            <form noValidate onKeyDown={handleKeyDown}>
               {error && (
                 <div className="mb-4 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2">
                   <AlertCircle className="h-4 w-4 text-red-600" />
@@ -343,15 +344,18 @@ export default function RegisterPage() {
                       <Label>I am a</Label>
                       <Controller
                         control={control}
-                        name="role"
+                        name="is_employer"
                         render={({ field }) => (
-                          <Select onValueChange={field.onChange} value={field.value}>
+                          <Select 
+                            onValueChange={(value) => field.onChange(value === 'true')} 
+                            value={field.value ? 'true' : 'false'}
+                          >
                             <SelectTrigger className="h-11 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-xl">
                               <SelectValue placeholder="Select your role" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="candidate">Candidate</SelectItem>
-                              <SelectItem value="hr">HR / Recruiter</SelectItem>
+                              <SelectItem value="false">Candidate</SelectItem>
+                              <SelectItem value="true">Recruiter / HR</SelectItem>
                             </SelectContent>
                           </Select>
                         )}
@@ -359,7 +363,7 @@ export default function RegisterPage() {
                     </div>
 
                     <AnimatePresence>
-                      {selectedRole === "hr" && (
+                      {selectedIsEmployer && (
                         <motion.div
                           initial={{ opacity: 0, height: 0 }}
                           animate={{ opacity: 1, height: "auto" }}
@@ -385,7 +389,7 @@ export default function RegisterPage() {
                     </AnimatePresence>
                   </motion.div>
                 )}
-              </motion.div>
+              </AnimatePresence>
 
               {/* Navigation buttons */}
               <div className="mt-6 space-y-3">
@@ -400,7 +404,7 @@ export default function RegisterPage() {
                       Back
                     </Button>
                   )}
-                  {(currentStep < totalSteps && selectedRole === "candidate") || (currentStep < 2 && selectedRole === "hr") ? (
+                  {currentStep < totalSteps ? (
                     <Button
                       type="button"
                       onClick={nextStep}
@@ -411,25 +415,39 @@ export default function RegisterPage() {
                     </Button>
                   ) : (
                     <Button
-                      type="submit"
-                      disabled={!isStepValid()}
+                      type="button"
+                      onClick={() => {
+                        if (isStepValid() && !isSubmitting) {
+                          onSubmit(formValues);
+                        }
+                      }}
+                      disabled={!isStepValid() || isSubmitting}
                       className="flex-1 h-11 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl shadow-lg shadow-indigo-600/25"
                     >
-                      Create Account <ArrowRight className="ml-2 h-4 w-4" />
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Creating...
+                        </>
+                      ) : (
+                        <>
+                          Create Account <ArrowRight className="ml-2 h-4 w-4" />
+                        </>
+                      )}
                     </Button>
                   )}
-                </Button>
-              </motion.div>
+                </div>
+              </div>
 
               <motion.p
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.7 }}
+                transition={{ delay: 0.3 }}
                 className="text-center text-sm text-slate-600 dark:text-slate-400"
               >
                 Already have an account?{' '}
                 <Link
-                  href={`/login?type=${isEmployerDefault ? 'hr' : 'candidate'}`}
+                  href="/login"
                   className="text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 font-medium"
                 >
                   Sign in

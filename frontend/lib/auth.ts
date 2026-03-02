@@ -3,7 +3,7 @@
 import Cookies from 'js-cookie';
 
 const TOKEN_KEY = 'auth_token';
-const ROLE_KEY = 'user_role';
+const IS_EMPLOYER_KEY = 'is_employer';
 const USER_KEY = 'user_data';
 
 export function setAuthToken(token: string) {
@@ -16,17 +16,17 @@ export function getAuthToken(): string | undefined {
 
 export function removeAuthToken() {
   Cookies.remove(TOKEN_KEY);
-  Cookies.remove(ROLE_KEY);
+  Cookies.remove(IS_EMPLOYER_KEY);
   Cookies.remove(USER_KEY);
 }
 
-export function setUserRole(role: 'hr' | 'candidate') {
-  Cookies.set(ROLE_KEY, role, { expires: 7 });
+export function setIsEmployer(isEmployer: boolean) {
+  Cookies.set(IS_EMPLOYER_KEY, String(isEmployer), { expires: 7 });
 }
 
-export function getUserRole(): 'hr' | 'candidate' | null {
-  const role = Cookies.get(ROLE_KEY);
-  return role as 'hr' | 'candidate' | null;
+export function getIsEmployer(): boolean | null {
+  const value = Cookies.get(IS_EMPLOYER_KEY);
+  return value ? value === 'true' : null;
 }
 
 export function setUserData(data: any) {
