@@ -3,15 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import Link from "next/link";
 import { useState, useCallback, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -83,6 +75,11 @@ export default function RegisterPage() {
       company: "",
     },
   });
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] =
+    useState<Partial<Record<keyof RegisterFormData, string>>>({});
+  const [showPassword, setShowPassword] = useState(false);
 
   const selectedRole = watch("role");
   const formValues = watch();
@@ -108,9 +105,19 @@ export default function RegisterPage() {
     }
   };
 
-  const prevStep = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+    if (errors[name as keyof RegisterFormData]) {
+      setErrors((prev) => ({
+        ...prev,
+        [name]: undefined,
+      }));
     }
   };
 
@@ -148,54 +155,16 @@ export default function RegisterPage() {
     }
   };
 
-  // Floating orbs animation (same as login page)
-  const floatingOrb = (delay: number) => ({
-    animate: {
-      y: [0, -20, 0],
-      x: [0, 10, 0],
-      transition: {
-        duration: 8,
-        repeat: Infinity,
-        ease: "easeInOut",
-        delay,
-      },
-    },
-  });
+  const heading = isEmployerDefault ? "Sign up as HR" : "Create your account";
+  const description = isEmployerDefault
+    ? "Fill in the details below to start posting jobs."
+    : "Let us know who you are so we can get you started.";
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Floating orbs - same as login page */}
-      <motion.div
-        animate={{
-          y: [0, -20, 0],
-          x: [0, 10, 0],
-        }}
-        transition={{
-          duration: 8,
-          repeat: Infinity,
-          ease: "easeInOut"
-        }}
-        className="absolute top-20 left-10 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -z-10"
-      />
-      <motion.div
-        animate={{
-          y: [0, 20, 0],
-          x: [0, -10, 0],
-        }}
-        transition={{
-          duration: 7,
-          repeat: Infinity,
-          ease: "easeInOut",
-          delay: 1
-        }}
-        className="absolute bottom-20 right-10 w-80 h-80 bg-purple-400/10 rounded-full blur-3xl -z-10"
-      />
-
-      {/* Main container - split layout like modern SaaS sites [citation:9] */}
-      <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 bg-white dark:bg-slate-900 rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
-        
-        {/* Left side - Brand/Value proposition */}
-        <div className="relative hidden lg:block bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 p-8 overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex items-center justify-center p-4">
+      <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 bg-white dark:bg-slate-900 rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
+        {/* left visual same as login for consistency */}
+        <div className="relative hidden lg:block bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 p-12 overflow-hidden">
           <div className="absolute inset-0 bg-grid-white/[0.2] bg-[size:20px_20px]" />
           
           <div className="relative h-full flex flex-col justify-between">
@@ -260,20 +229,21 @@ export default function RegisterPage() {
           </div>
         </div>
 
-        {/* Right side - Multi-step form */}
-        <div className="p-6 lg:p-8 bg-white dark:bg-slate-900">
-          <div className="max-w-md mx-auto w-full">
-            {/* Mobile logo */}
-            <div className="lg:hidden mb-6">
+        {/* right side form */}
+        <div className="p-8 lg:p-12 bg-white dark:bg-slate-900">
+          <div className="max-w-sm mx-auto w-full">
+            <div className="lg:hidden mb-8">
               <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
                 HireFlow
               </h1>
             </div>
-
-            {/* Header with step indicator */}
-            <div className="mb-6">
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
-                Step {currentStep} of {totalSteps}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-8"
+            >
+              <h2 className="text-2xl font-semibold text-slate-900 dark:text-white mb-2">
+                {heading}
               </h2>
               <p className="text-sm text-slate-500 dark:text-slate-400">
                 {currentStep === 1 && "Create your account"}
@@ -415,7 +385,7 @@ export default function RegisterPage() {
                     </AnimatePresence>
                   </motion.div>
                 )}
-              </AnimatePresence>
+              </motion.div>
 
               {/* Navigation buttons */}
               <div className="mt-6 space-y-3">
@@ -448,15 +418,23 @@ export default function RegisterPage() {
                       Create Account <ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
                   )}
-                </div>
+                </Button>
+              </motion.div>
 
-                <p className="text-center text-sm text-slate-600 dark:text-slate-400">
-                  Already have an account?{" "}
-                  <Link href="/login" className="text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 font-medium">
-                    Sign in
-                  </Link>
-                </p>
-              </div>
+              <motion.p
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.7 }}
+                className="text-center text-sm text-slate-600 dark:text-slate-400"
+              >
+                Already have an account?{' '}
+                <Link
+                  href={`/login?type=${isEmployerDefault ? 'hr' : 'candidate'}`}
+                  className="text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 font-medium"
+                >
+                  Sign in
+                </Link>
+              </motion.p>
             </form>
           </div>
         </div>

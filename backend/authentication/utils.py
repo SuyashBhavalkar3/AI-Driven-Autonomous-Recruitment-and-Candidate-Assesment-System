@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, timedelta
-from typing import Optional, Union
+from typing import Optional
 
 from dotenv import load_dotenv
 import jwt
@@ -10,7 +10,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .models import Employer, Candidate
+from .models import User
 
 # Load environment variables
 load_dotenv()
@@ -55,9 +55,9 @@ def create_access_token(user_id: int, is_employer: bool, expires_delta: Optional
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> Union[Employer, Candidate]:
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
     """
-    Extract current user from JWT token and return either an Employer or Candidate.
+    Extract current user from JWT token and return a User object.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -67,16 +67,12 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("sub")
-        is_employer = payload.get("is_employer")
         if user_id is None:
             raise credentials_exception
     except jwt.PyJWTError:
         raise credentials_exception
 
-    if is_employer:
-        user = db.query(Employer).filter(Employer.id == int(user_id)).first()
-    else:
-        user = db.query(Candidate).filter(Candidate.id == int(user_id)).first()
+    user = db.query(User).filter(User.id == int(user_id)).first()
     
     if user is None:
         raise credentials_exception
