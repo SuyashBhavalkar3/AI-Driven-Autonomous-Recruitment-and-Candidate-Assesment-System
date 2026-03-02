@@ -13,7 +13,7 @@ class UserCreate(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
-    is_employer: bool  # To specify which table to look into
+    is_employer: bool  # To specify user role
 
 
 class Token(BaseModel):
@@ -26,20 +26,11 @@ class TokenData(BaseModel):
     is_employer: Optional[bool] = None
 
 
-class EmployerOut(BaseModel):
+class UserOut(BaseModel):
     id: int
     name: str
     email: EmailStr
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
-class CandidateOut(BaseModel):
-    id: int
-    name: str
-    email: EmailStr
+    is_employer: bool
     created_at: datetime
 
     class Config:

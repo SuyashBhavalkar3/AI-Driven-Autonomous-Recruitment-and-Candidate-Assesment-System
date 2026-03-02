@@ -4,53 +4,35 @@ from datetime import timedelta
 from typing import Union
 
 from .database import get_db
-from .models import Employer, Candidate
-from .schemas import UserCreate, LoginRequest, Token, EmployerOut, CandidateOut
+from .models import User
+from .schemas import UserCreate, LoginRequest, Token, UserOut
 from .utils import get_password_hash, verify_password, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
 
 router = APIRouter()
 
 
-@router.post("/register", response_model=Union[EmployerOut, CandidateOut])
+@router.post("/register", response_model=UserOut)
 def register(user_in: UserCreate, db: Session = Depends(get_db)):
     """
     Register a new user as either an employer or candidate based on is_employer flag.
-    If is_employer is True, entry goes to employers table.
-    If is_employer is False, entry goes to candidates table.
     """
     
-    if user_in.is_employer:
-        # Check if email already exists in employers table
-        existing_user = db.query(Employer).filter(Employer.email == user_in.email).first()
-        if existing_user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already registered as employer"
-            )
-        
-        # Hash password & create employer
-        hashed_password = get_password_hash(user_in.password)
-        user = Employer(
-            name=user_in.name,
-            email=user_in.email,
-            hashed_password=hashed_password
+    # Check if email already exists
+    existing_user = db.query(User).filter(User.email == user_in.email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
         )
-    else:
-        # Check if email already exists in candidates table
-        existing_user = db.query(Candidate).filter(Candidate.email == user_in.email).first()
-        if existing_user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already registered as candidate"
-            )
-        
-        # Hash password & create candidate
-        hashed_password = get_password_hash(user_in.password)
-        user = Candidate(
-            name=user_in.name,
-            email=user_in.email,
-            hashed_password=hashed_password
-        )
+    
+    # Hash password & create user
+    hashed_password = get_password_hash(user_in.password)
+    user = User(
+        name=user_in.name,
+        email=user_in.email,
+        hashed_password=hashed_password,
+        is_employer=user_in.is_employer
+    )
     
     db.add(user)
     db.commit()
@@ -62,24 +44,22 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
 @router.post("/login", response_model=Token)
 def login(user_in: LoginRequest, db: Session = Depends(get_db)):
     """
-    Login a user based on their role (employer or candidate).
-    The is_employer flag determines which table to search in.
+    Login a user based on their email and verify the is_employer flag matches.
     """
     
-    if user_in.is_employer:
-        # Search in employers table
-        user = db.query(Employer).filter(Employer.email == user_in.email).first()
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid email or password")
-    else:
-        # Search in candidates table
-        user = db.query(Candidate).filter(Candidate.email == user_in.email).first()
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid email or password")
+    # Search for user by email
+    user = db.query(User).filter(User.email == user_in.email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
     
+    # Verify password
     if not verify_password(user_in.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
-    access_token = create_access_token(user_id=user.id, is_employer=user_in.is_employer)
+    # Verify the is_employer flag matches
+    if user.is_employer != user_in.is_employer:
+        raise HTTPException(status_code=401, detail="Invalid role for this email")
+    
+    access_token = create_access_token(user_id=user.id, is_employer=user.is_employer)
     
     return {"access_token": access_token, "token_type": "bearer"}
