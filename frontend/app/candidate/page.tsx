@@ -1,234 +1,362 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { motion } from "framer-motion";
+import gsap from "gsap";
 import Link from "next/link";
-import { Briefcase, FileText, Bell, Award, Clock, ArrowRight, Target, TrendingUp } from "lucide-react";
+import {
+  Briefcase,
+  FileText,
+  Bell,
+  Award,
+  Clock,
+  ArrowRight,
+  Target,
+  TrendingUp,
+  Sparkles,
+  MapPin,
+  Calendar,
+  Loader2,
+  Settings,
+} from "lucide-react";
+import { getUserData, getAuthToken } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/api";
 import { ProfileCompletionCard } from "@/components/ProfileCompletionCard";
-import { calculateProfileCompletion, UserProfile } from "@/lib/profileCompletion";
+import { calculateProfileCompletion } from "@/lib/profileCompletion";
 
-// Mock user profile data - replace with actual data from backend
-const mockUserProfile: UserProfile = {
-  fullName: "John Doe",
-  email: "john@example.com",
-  phone: "",
-  location: "",
-  bio: "",
-  skills: [],
-  resume: "",
-  experiences: [],
+// Mock API functions – replace with actual endpoints
+const fetchDashboardStats = async () => {
+  // Simulate API call
+  return [
+    { label: "Applications", value: 12, change: "+2 this week", icon: FileText },
+    { label: "In Progress", value: 5, change: "3 interviews", icon: Briefcase },
+    { label: "Interviews", value: 2, change: "1 upcoming", icon: Bell },
+    { label: "Offers", value: 1, change: "pending response", icon: Award },
+  ];
 };
 
-const stats = [
-  { label: "Applications", value: "12", icon: FileText, color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-950/30" },
-  { label: "In Progress", value: "5", icon: Briefcase, color: "text-purple-600", bg: "bg-purple-50 dark:bg-purple-950/30" },
-  { label: "Interviews", value: "2", icon: Bell, color: "text-indigo-600", bg: "bg-indigo-50 dark:bg-indigo-950/30" },
-  { label: "Offers", value: "1", icon: Award, color: "text-green-600", bg: "bg-green-50 dark:bg-green-950/30" },
-];
+const fetchRecommendedJobs = async () => {
+  return [
+    { id: 1, title: "Senior Frontend Developer", company: "TechCorp", location: "Remote", match: 92 },
+    { id: 2, title: "Full Stack Engineer", company: "InnovateLabs", location: "New York", match: 85 },
+    { id: 3, title: "DevOps Engineer", company: "CloudTech", location: "Austin", match: 78 },
+  ];
+};
 
-const recentApplications: Array<{ id: number; company: string; position: string; status: keyof typeof statusColors; action: string; link: string }> = [
-  { id: 1, company: "TechCorp", position: "Senior Frontend Developer", status: "assessment_pending", action: "Schedule Assessment", link: "/candidate/applications" },
-  { id: 2, company: "InnovateLabs", position: "Full Stack Engineer", status: "interview_scheduled", action: "Join Interview", link: "/candidate/interview" },
-  { id: 3, company: "CloudTech", position: "DevOps Engineer", status: "offer", action: "View Offer", link: "/candidate/applications" },
-];
-
-const upcomingTasks = [
-  { id: 1, title: "Schedule Frontend Assessment", company: "TechCorp", due: "Today", priority: "high" },
-  { id: 2, title: "AI Interview", company: "InnovateLabs", due: "Tomorrow, 2:00 PM", priority: "medium" },
-  { id: 3, title: "Respond to Offer", company: "CloudTech", due: "Mar 10, 2024", priority: "high" },
-];
-
-const applicationTrend = [
-  { month: "Jan", count: 2 },
-  { month: "Feb", count: 4 },
-  { month: "Mar", count: 6 },
-];
-
-const statusDistribution = [
-  { status: "Under Review", count: 4, color: "bg-blue-500" },
-  { status: "Assessment", count: 3, color: "bg-purple-500" },
-  { status: "Interview", count: 2, color: "bg-indigo-500" },
-  { status: "Offer", count: 1, color: "bg-green-500" },
-  { status: "Rejected", count: 2, color: "bg-red-500" },
-];
-
-const statusColors = {
-  assessment_pending: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-  interview_scheduled: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
-  offer: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+const fetchUpcomingInterviews = async () => {
+  return [
+    { id: 1, company: "TechCorp", position: "Frontend Developer", date: "Tomorrow, 2:00 PM", type: "Technical" },
+    { id: 2, company: "InnovateLabs", position: "Full Stack", date: "Mar 12, 11:00 AM", type: "HR" },
+  ];
 };
 
 export default function CandidateDashboard() {
-  const maxCount = Math.max(...applicationTrend.map(d => d.count));
-  const totalApplications = statusDistribution.reduce((sum, item) => sum + item.count, 0);
-  
-  // Calculate profile completion
-  const profileStatus = calculateProfileCompletion(mockUserProfile);
+  const [userData, setUserData] = useState<any>(null);
+  const [stats, setStats] = useState<any[]>([]);
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [interviews, setInterviews] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const statsRef = useRef<HTMLDivElement>(null);
+  const jobsRef = useRef<HTMLDivElement>(null);
+  const [particles, setParticles] = useState<React.ReactNode[]>([]);
+
+  // Load user data from auth
+  useEffect(() => {
+    const stored = getUserData();
+    if (stored) setUserData(stored);
+  }, []);
+
+  // Fetch dashboard data
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [statsData, jobsData, interviewsData] = await Promise.all([
+          fetchDashboardStats(),
+          fetchRecommendedJobs(),
+          fetchUpcomingInterviews(),
+        ]);
+        setStats(statsData);
+        setJobs(jobsData);
+        setInterviews(interviewsData);
+      } catch (error) {
+        console.error("Failed to load dashboard data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
+  // Generate decorative particles (client-side only)
+  useEffect(() => {
+    const newParticles: React.ReactNode[] = [];
+    for (let i = 0; i < 15; i++) {
+      const top = Math.random() * 100;
+      const left = Math.random() * 100;
+      newParticles.push(
+        <div
+          key={`dot-${i}`}
+          className="absolute w-1.5 h-1.5 rounded-full bg-[#B8915C]/10 dark:bg-[#B8915C]/5"
+          style={{ top: `${top}%`, left: `${left}%`, filter: "blur(1px)" }}
+        />
+      );
+    }
+    setParticles(newParticles);
+  }, []);
+
+  // GSAP animations after data loads
+  useEffect(() => {
+    if (!loading) {
+      const ctx = gsap.context(() => {
+        // Animate stat values (count-up)
+        gsap.from(".stat-value", {
+          textContent: 0,
+          duration: 1.5,
+          ease: "power1.out",
+          snap: { textContent: 1 },
+          stagger: 0.2,
+        });
+
+        // Animate stat cards
+        gsap.from(".stat-card", {
+          y: 30,
+          opacity: 0,
+          duration: 0.8,
+          stagger: 0.1,
+          ease: "back.out(1.2)",
+        });
+
+        // Animate job cards
+        gsap.from(".job-card", {
+          x: -20,
+          opacity: 0,
+          duration: 0.6,
+          stagger: 0.15,
+          delay: 0.4,
+          ease: "power3.out",
+        });
+
+        // Animate interview items
+        gsap.from(".interview-item", {
+          x: 20,
+          opacity: 0,
+          duration: 0.5,
+          stagger: 0.1,
+          delay: 0.6,
+          ease: "power3.out",
+        });
+      }, [statsRef, jobsRef]);
+
+      return () => ctx.revert();
+    }
+  }, [loading]);
+
+  // Profile completion calculation
+  const profileStatus = calculateProfileCompletion({
+    fullName: userData?.full_name || "",
+    email: userData?.email || "",
+    phone: "",
+    location: "",
+    bio: "",
+    skills: [],
+    resume: "",
+    experiences: [],
+  });
+
+  if (loading) {
+    return (
+      <div className="relative min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-[#B8915C]" />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen">
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Welcome back, John!</h1>
-          <p className="text-slate-600 dark:text-slate-400">Here's your job search overview</p>
-        </div>
+    <div className="relative">
+      {/* Decorative particles */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">{particles}</div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {stats.map((stat) => (
-            <Card key={stat.label} className="border-slate-200 dark:border-slate-800">
+      {/* Soft gradient blobs */}
+      <div className="absolute -top-20 -right-20 w-64 h-64 bg-[#B8915C]/5 rounded-full blur-3xl -z-10" />
+      <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-[#9F7A4F]/5 rounded-full blur-3xl -z-10" />
+
+      {/* Header */}
+      <div className="mb-8 flex items-center justify-between relative z-10">
+        <div>
+          <h1 className="font-serif text-4xl font-medium text-[#2D2A24] dark:text-white mb-2 flex items-center gap-2">
+            Welcome back, {userData?.full_name?.split(" ")[0] || "Candidate"}!
+            <Sparkles className="h-6 w-6 text-[#B8915C] animate-pulse" />
+          </h1>
+          <p className="text-[#5A534A] dark:text-slate-400">
+            Here's what's happening with your job search
+          </p>
+        </div>
+        <Badge
+          variant="outline"
+          className="border-[#B8915C]/30 text-[#B8915C] bg-white/50 backdrop-blur-sm"
+        >
+          <Calendar className="h-3 w-3 mr-1" />
+          {new Date().toLocaleDateString("en-US", { month: "long", day: "numeric" })}
+        </Badge>
+      </div>
+
+      {/* Stats grid */}
+      <div ref={statsRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {stats.map((stat) => (
+          <motion.div
+            key={stat.label}
+            className="stat-card"
+            whileHover={{ y: -4 }}
+            transition={{ type: "spring", stiffness: 400 }}
+          >
+            <Card className="border-none bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm shadow-lg hover:shadow-xl transition-all duration-300">
               <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-slate-600 dark:text-slate-400">{stat.label}</p>
-                    <p className="text-3xl font-bold text-slate-900 dark:text-white mt-1">{stat.value}</p>
-                  </div>
-                  <div className={`p-3 rounded-lg ${stat.bg}`}>
-                    <stat.icon className={`h-6 w-6 ${stat.color}`} />
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm text-[#5A534A] dark:text-slate-400">{stat.label}</p>
+                  <div className="p-2 rounded-lg bg-[#B8915C]/10">
+                    <stat.icon className="h-5 w-5 text-[#B8915C]" />
                   </div>
                 </div>
+                <p className="stat-value text-3xl font-bold text-[#2D2A24] dark:text-white">
+                  {stat.value}
+                </p>
+                <p className="text-xs text-[#A69A8C] mt-2">{stat.change}</p>
               </CardContent>
             </Card>
-          ))}
-        </div>
+          </motion.div>
+        ))}
+      </div>
 
-        {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Application Trend Chart */}
-          <Card className="border-slate-200 dark:border-slate-800">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-slate-900 dark:text-white">Application Trend</h3>
-                <TrendingUp className="h-5 w-5 text-green-600" />
-              </div>
-              <div className="space-y-4">
-                {applicationTrend.map((data) => (
-                  <div key={data.month}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm text-slate-600 dark:text-slate-400">{data.month}</span>
-                      <span className="text-sm font-medium text-slate-900 dark:text-white">{data.count}</span>
-                    </div>
-                    <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
-                      <div 
-                        className="bg-gradient-to-r from-blue-500 to-indigo-500 h-2 rounded-full transition-all duration-500"
-                        style={{ width: `${(data.count / maxCount) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+      {/* Profile completion card */}
+      {!profileStatus.isComplete && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.3 }}
+          className="mb-6"
+        >
+          <ProfileCompletionCard status={profileStatus} showDetails={true} />
+        </motion.div>
+      )}
 
-          {/* Status Distribution Chart */}
-          <Card className="border-slate-200 dark:border-slate-800">
-            <CardContent className="p-6">
-              <h3 className="font-semibold text-slate-900 dark:text-white mb-4">Application Status</h3>
-              <div className="space-y-3">
-                {statusDistribution.map((item) => (
-                  <div key={item.status} className="flex items-center gap-3">
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm text-slate-600 dark:text-slate-400">{item.status}</span>
-                        <span className="text-sm font-medium text-slate-900 dark:text-white">
-                          {item.count} ({Math.round((item.count / totalApplications) * 100)}%)
-                        </span>
-                      </div>
-                      <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
-                        <div 
-                          className={`${item.color} h-2 rounded-full transition-all duration-500`}
-                          style={{ width: `${(item.count / totalApplications) * 100}%` }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-4">
-            {/* Profile Completion Card */}
-            {!profileStatus.isComplete && (
-              <ProfileCompletionCard status={profileStatus} showDetails={true} />
-            )}
-
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Recent Applications</h2>
-              <Link href="/candidate/applications">
-                <Button variant="ghost" size="sm">
-                  View All <ArrowRight className="h-4 w-4 ml-1" />
-                </Button>
-              </Link>
-            </div>
-            {recentApplications.map((app) => (
-              <Card key={app.id} className="border-slate-200 dark:border-slate-800">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-slate-900 dark:text-white">{app.position}</h3>
-                      <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{app.company}</p>
-                      <Badge className={`mt-2 ${statusColors[app.status]}`}>
-                        {app.status.replace("_", " ")}
-                      </Badge>
-                    </div>
-                    <Link href={app.link}>
-                      <Button size="sm">{app.action}</Button>
-                    </Link>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+      {/* Main content */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left column – jobs */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-[#2D2A24] dark:text-white">
+              Recommended for you
+            </h2>
+            <Link href="/candidate/jobs">
+              <Button variant="ghost" size="sm" className="text-[#B8915C] hover:text-[#9F7A4F]">
+                View all <ArrowRight className="h-4 w-4 ml-1" />
+              </Button>
+            </Link>
           </div>
 
-          <div className="space-y-4">
-            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Upcoming Tasks</h2>
-            <Card className="border-slate-200 dark:border-slate-800">
-              <CardContent className="p-4 space-y-3">
-                {upcomingTasks.map((task) => (
-                  <div key={task.id} className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                    <div className="flex items-start gap-2">
-                      <div className={`w-2 h-2 rounded-full mt-2 ${task.priority === "high" ? "bg-red-500" : "bg-yellow-500"}`} />
+          <div ref={jobsRef} className="space-y-4">
+            {jobs.map((job) => (
+              <motion.div
+                key={job.id}
+                className="job-card"
+                whileHover={{ scale: 1.02 }}
+                transition={{ type: "spring", stiffness: 400 }}
+              >
+                <Card className="border-none bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm shadow-lg hover:shadow-xl transition-all duration-300">
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">
-                        <p className="text-sm font-medium text-slate-900 dark:text-white">{task.title}</p>
-                        <p className="text-xs text-slate-600 dark:text-slate-400">{task.company}</p>
+                        <h3 className="font-semibold text-[#2D2A24] dark:text-white">
+                          {job.title}
+                        </h3>
+                        <p className="text-sm text-[#5A534A] dark:text-slate-400 mt-1">
+                          {job.company}
+                        </p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <div className="flex items-center gap-1 text-xs text-[#A69A8C]">
+                            <MapPin className="h-3 w-3" />
+                            {job.location}
+                          </div>
+                          <Badge className="bg-[#B8915C]/10 text-[#B8915C] border-none">
+                            {job.match}% match
+                          </Badge>
+                        </div>
+                      </div>
+                      <Button size="sm" className="bg-[#B8915C] hover:bg-[#9F7A4F]">
+                        Apply
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+
+        {/* Right column – interviews & quick actions */}
+        <div className="space-y-6">
+          <h2 className="text-xl font-semibold text-[#2D2A24] dark:text-white">Upcoming</h2>
+          <Card className="border-none bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm shadow-lg">
+            <CardContent className="p-4 space-y-3">
+              {interviews.map((interview) => (
+                <motion.div
+                  key={interview.id}
+                  className="interview-item"
+                  whileHover={{ x: 5 }}
+                  transition={{ type: "spring", stiffness: 400 }}
+                >
+                  <div className="p-3 bg-[#F1E9E0] dark:bg-slate-800/50 rounded-lg cursor-pointer">
+                    <div className="flex items-start gap-2">
+                      <div className="w-2 h-2 rounded-full mt-2 bg-[#B8915C]" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-[#2D2A24] dark:text-white">
+                          {interview.position} at {interview.company}
+                        </p>
+                        <p className="text-xs text-[#5A534A] dark:text-slate-400">
+                          {interview.type} Interview
+                        </p>
                         <div className="flex items-center gap-1 mt-1">
-                          <Clock className="h-3 w-3 text-slate-500" />
-                          <p className="text-xs text-slate-500">{task.due}</p>
+                          <Clock className="h-3 w-3 text-[#A69A8C]" />
+                          <p className="text-xs text-[#5A534A] dark:text-slate-400">
+                            {interview.date}
+                          </p>
                         </div>
                       </div>
                     </div>
                   </div>
-                ))}
-              </CardContent>
-            </Card>
+                </motion.div>
+              ))}
+            </CardContent>
+          </Card>
 
-            <Card className="border-slate-200 dark:border-slate-800">
-              <CardContent className="p-4 space-y-2">
-                <h3 className="font-semibold mb-3">Quick Actions</h3>
-                <Link href="/candidate/jobs">
-                  <Button variant="outline" className="w-full justify-start">
-                    <Briefcase className="h-4 w-4 mr-2" />
-                    Browse Jobs
-                  </Button>
-                </Link>
-                <Link href="/candidate/schedule">
-                  <Button variant="outline" className="w-full justify-start">
-                    <Bell className="h-4 w-4 mr-2" />
-                    Notifications
-                  </Button>
-                </Link>
-                <Link href="/candidate/applications">
-                  <Button variant="outline" className="w-full justify-start">
-                    <Target className="h-4 w-4 mr-2" />
-                    Track Applications
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
-          </div>
+          {/* Quick actions */}
+          <Card className="border-none bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm shadow-lg">
+            <CardContent className="p-4 space-y-2">
+              <h3 className="font-semibold text-[#2D2A24] dark:text-white mb-3">Quick actions</h3>
+              <Link href="/candidate/jobs">
+                <Button variant="outline" className="w-full justify-start border-[#D6CDC2] text-[#4A443C] hover:bg-[#F1E9E0]">
+                  <Briefcase className="h-4 w-4 mr-2 text-[#B8915C]" />
+                  Browse jobs
+                </Button>
+              </Link>
+              <Link href="/candidate/applications">
+                <Button variant="outline" className="w-full justify-start border-[#D6CDC2] text-[#4A443C] hover:bg-[#F1E9E0]">
+                  <Target className="h-4 w-4 mr-2 text-[#B8915C]" />
+                  Track applications
+                </Button>
+              </Link>
+              <Link href="/candidate/profile">
+                <Button variant="outline" className="w-full justify-start border-[#D6CDC2] text-[#4A443C] hover:bg-[#F1E9E0]">
+                  <Settings className="h-4 w-4 mr-2 text-[#B8915C]" />
+                  Update profile
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
