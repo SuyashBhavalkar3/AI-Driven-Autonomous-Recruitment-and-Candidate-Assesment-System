@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,22 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MapPin, Briefcase, Clock, DollarSign, Search, Building2, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { MapPin, Briefcase, Clock, DollarSign, Search, Building2, CheckCircle2, XCircle, Loader2, AlertCircle } from "lucide-react";
+import { calculateProfileCompletion, UserProfile } from "@/lib/profileCompletion";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+
+// Mock user profile - replace with actual data from backend
+const mockUserProfile: UserProfile = {
+  fullName: "John Doe",
+  email: "john@example.com",
+  phone: "",
+  location: "",
+  bio: "",
+  skills: [],
+  resume: "",
+  experiences: [],
+};
 
 const jobs = [
   {
@@ -59,6 +74,7 @@ const jobs = [
 type ApplicationStatus = "idle" | "applying" | "success" | "rejected";
 
 export default function JobsPage() {
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [location, setLocation] = useState("");
   const [jobType, setJobType] = useState("");
@@ -66,6 +82,19 @@ export default function JobsPage() {
   const [applicationStatus, setApplicationStatus] = useState<ApplicationStatus>("idle");
   const [coverLetter, setCoverLetter] = useState("");
   const [matchScore, setMatchScore] = useState<number | null>(null);
+  
+  // Check profile completion
+  const profileStatus = calculateProfileCompletion(mockUserProfile);
+
+  // Auto-redirect to profile if incomplete after 3 seconds
+  useEffect(() => {
+    if (!profileStatus.isComplete && selectedJob) {
+      const timer = setTimeout(() => {
+        router.push('/candidate/profile');
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [profileStatus.isComplete, selectedJob, router]);
 
   const filteredJobs = jobs.filter((job) => {
     return (
@@ -76,6 +105,10 @@ export default function JobsPage() {
   });
 
   const handleApply = (job: typeof jobs[0]) => {
+    // Check if profile is complete before allowing application
+    if (!profileStatus.isComplete) {
+      return; // Dialog will show incomplete profile message
+    }
     setSelectedJob(job);
     setApplicationStatus("idle");
     setCoverLetter("");
@@ -149,7 +182,17 @@ export default function JobsPage() {
                         <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{job.title}</h3>
                         <p className="text-slate-600 dark:text-slate-400 mt-1">{job.company}</p>
                       </div>
-                      <Button onClick={() => handleApply(job)} size="sm">Apply</Button>
+                      <Button 
+                        onClick={() => {
+                          setSelectedJob(job);
+                          if (profileStatus.isComplete) {
+                            handleApply(job);
+                          }
+                        }} 
+                        size="sm"
+                      >
+                        Apply
+                      </Button>
                     </div>
                     <div className="flex flex-wrap items-center gap-4 mt-3 text-sm text-slate-600 dark:text-slate-400">
                       <span className="flex items-center gap-1">
@@ -191,7 +234,40 @@ export default function JobsPage() {
           </DialogHeader>
 
           <AnimatePresence mode="wait">
-            {applicationStatus === "idle" && (
+            {/* Profile Incomplete Warning */}
+            {!profileStatus.isComplete && (
+              <motion.div key="incomplete" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+                <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+                  <div className="flex gap-3">
+                    <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="font-semibold text-amber-900 dark:text-amber-300 mb-2">Complete Your Profile First</h4>
+                      <p className="text-sm text-amber-800 dark:text-amber-400 mb-3">
+                        You need to complete your profile (100%) before applying for jobs. Redirecting to profile page in 3 seconds...
+                      </p>
+                      <div className="space-y-1 mb-3">
+                        <p className="text-sm font-medium text-amber-900 dark:text-amber-300">Missing:</p>
+                        <ul className="text-sm text-amber-800 dark:text-amber-400 list-disc list-inside">
+                          {profileStatus.missingFields.map(field => (
+                            <li key={field}>{field}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Link href="/candidate/profile" className="flex-1">
+                    <Button className="w-full">Complete Profile</Button>
+                  </Link>
+                  <Button variant="outline" onClick={() => setSelectedJob(null)} className="flex-1">
+                    Cancel
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+
+            {profileStatus.isComplete && applicationStatus === "idle" && (
               <motion.div key="form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4">
                 <div>
                   <label className="text-sm font-medium mb-2 block">Cover Letter (Optional)</label>
@@ -209,7 +285,7 @@ export default function JobsPage() {
               </motion.div>
             )}
 
-            {applicationStatus === "applying" && (
+            {profileStatus.isComplete && applicationStatus === "applying" && (
               <motion.div key="applying" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-8 text-center">
                 <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold mb-2">Analyzing Your Profile</h3>
@@ -220,7 +296,7 @@ export default function JobsPage() {
               </motion.div>
             )}
 
-            {applicationStatus === "success" && (
+            {profileStatus.isComplete && applicationStatus === "success" && (
               <motion.div key="success" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-8 text-center">
                 <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                   <CheckCircle2 className="h-10 w-10 text-green-600" />
@@ -234,7 +310,7 @@ export default function JobsPage() {
               </motion.div>
             )}
 
-            {applicationStatus === "rejected" && (
+            {profileStatus.isComplete && applicationStatus === "rejected" && (
               <motion.div key="rejected" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-8 text-center">
                 <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                   <XCircle className="h-10 w-10 text-red-600" />

@@ -1,20 +1,19 @@
-// lib/api.ts
+// API client for backend communication
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-
-export interface RegisterPayload {
+export interface RegisterData {
+  fullName: string;
   email: string;
   password: string;
-  name: string;
-  is_employer: boolean;
+  role: 'hr' | 'candidate';
+  company?: string;
 }
 
-export interface LoginPayload {
+export interface LoginData {
   email: string;
   password: string;
-  is_employer: boolean;
+  role: 'hr' | 'candidate';
 }
 
 export interface AuthResponse {
@@ -22,39 +21,59 @@ export interface AuthResponse {
   token_type: string;
 }
 
+export interface UserData {
+  id: number;
+  name: string;
+  email: string;
+  company?: string;
+  created_at: string;
+}
 
-
-async function apiFetch<T>(
-  endpoint: string,
-  options: RequestInit
-): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+export async function registerUser(data: RegisterData): Promise<UserData> {
+  const response = await fetch(`${API_BASE_URL}/v1/auth/register`, {
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
+      'Content-Type': 'application/json',
     },
-    ...options,
+    body: JSON.stringify(data),
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => null);
-    throw new Error(error?.detail || "API request failed");
+    const error = await response.json();
+    throw new Error(error.detail || 'Registration failed');
   }
 
   return response.json();
 }
 
+export async function loginUser(data: LoginData): Promise<AuthResponse> {
+  const response = await fetch(`${API_BASE_URL}/v1/auth/login`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
 
-export const authApi = {
-  register: (data: RegisterPayload) =>
-    apiFetch<AuthResponse>("/v1/auth/register", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Login failed');
+  }
 
-  login: (data: LoginPayload) =>
-    apiFetch<AuthResponse>("/v1/auth/login", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-};
+  return response.json();
+}
+
+export async function getCurrentUser(token: string): Promise<UserData> {
+  const response = await fetch(`${API_BASE_URL}/v1/auth/me`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch user data');
+  }
+
+  return response.json();
+}

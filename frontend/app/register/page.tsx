@@ -5,30 +5,75 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Mail, Lock, User, AlertCircle, Loader2 } from "lucide-react";
-import { authApi } from "@/lib/api";
+import { useState, useCallback, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import { 
+  ArrowRight, 
+  Mail, 
+  Lock, 
+  User, 
+  Building,
+  ChevronRight,
+  Loader2,
+  AlertCircle
+} from "lucide-react";
+import { registerUser, loginUser } from "@/lib/api";
+import { setAuthToken, setUserRole, setUserData } from "@/lib/auth";
 
-const registerSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(1, "Password is required"),
-});
+// Define validation schema with Zod
+const formSchema = z
+  .object({
+    fullName: z.string().min(2, "Full name must be at least 2 characters"),
+    email: z.string().email("Invalid email address"),
+    password: z.string().min(8, "Password must be at least 8 characters"),
+    role: z.enum(["candidate", "hr"]),
+    company: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.role === "hr" && !data.company) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: "Company name is required for HR",
+      path: ["company"],
+    }
+  );
 
-type RegisterFormData = z.infer<typeof registerSchema>;
+type FormData = z.infer<typeof formSchema>;
 
 export default function RegisterPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const userTypeParam = searchParams.get("type") || "candidate";
-  const isEmployerDefault = userTypeParam === "hr";
+  const router = useRouter();
+  const roleFromUrl = searchParams.get('role') as 'candidate' | 'hr' | null;
+  
+  const [showPassword, setShowPassword] = useState(false);
+  const [currentStep, setCurrentStep] = useState(1);
+  const totalSteps = 2;
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const [formData, setFormData] = useState<RegisterFormData>({
-    name: "",
-    email: "",
-    password: "",
+  const {
+    register,
+    control,
+    handleSubmit,
+    watch,
+    formState: { errors, isValid },
+  } = useForm<FormData>({
+    resolver: zodResolver(formSchema),
+    mode: "onChange",
+    defaultValues: {
+      fullName: "",
+      email: "",
+      password: "",
+      role: roleFromUrl || "candidate",
+      company: "",
+    },
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,23 +81,27 @@ export default function RegisterPage() {
     useState<Partial<Record<keyof RegisterFormData, string>>>({});
   const [showPassword, setShowPassword] = useState(false);
 
-  const validateForm = (): boolean => {
-    try {
-      registerSchema.parse(formData);
-      setErrors({});
-      return true;
-    } catch (err) {
-      if (err instanceof z.ZodError) {
-        const newErrors: Partial<
-          Record<keyof RegisterFormData, string>
-        > = {};
-        err.issues.forEach((issue) => {
-          const path = issue.path[0] as keyof RegisterFormData;
-          newErrors[path] = issue.message;
-        });
-        setErrors(newErrors);
-      }
-      return false;
+  const selectedRole = watch("role");
+  const formValues = watch();
+
+  // Check if current step is valid
+  const isStepValid = () => {
+    switch(currentStep) {
+      case 1:
+        return formValues.fullName && formValues.email && formValues.password;
+      case 2:
+        if (selectedRole === "hr") {
+          return formValues.company && formValues.company.trim() !== "";
+        }
+        return true;
+      default:
+        return false;
+    }
+  };
+
+  const nextStep = () => {
+    if (currentStep < totalSteps && isStepValid()) {
+      setCurrentStep(currentStep + 1);
     }
   };
 
@@ -72,37 +121,37 @@ export default function RegisterPage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const onSubmit = async (data: FormData) => {
+    setIsSubmitting(true);
     setError(null);
-
-    if (!validateForm()) {
-      return;
-    }
-
-    setIsLoading(true);
+    
     try {
-      const response = await authApi.register({
-        name: formData.name,
-        email: formData.email,
-        password: formData.password,
-        is_employer: isEmployerDefault,
+      // Register user
+      const userData = await registerUser({
+        fullName: data.fullName,
+        email: data.email,
+        password: data.password,
+        role: data.role,
+        company: data.company,
       });
 
-      // persist token and type
-      localStorage.setItem("access_token", response.access_token);
-      localStorage.setItem("user_type", isEmployerDefault ? "hr" : "candidate");
+      // Auto-login after registration
+      const authResponse = await loginUser({
+        email: data.email,
+        password: data.password,
+        role: data.role,
+      });
 
-      const dashboardPath = isEmployerDefault ? "/hr" : "/candidate";
-      router.push(dashboardPath);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Registration failed. Please try again."
-      );
-    } finally {
-      setIsLoading(false);
+      // Store auth data
+      setAuthToken(authResponse.access_token);
+      setUserRole(data.role);
+      setUserData(userData);
+
+      // Redirect to appropriate dashboard
+      router.push(data.role === 'hr' ? '/hr' : '/candidate');
+    } catch (err: any) {
+      setError(err.message || 'Registration failed. Please try again.');
+      setIsSubmitting(false);
     }
   };
 
@@ -117,47 +166,66 @@ export default function RegisterPage() {
         {/* left visual same as login for consistency */}
         <div className="relative hidden lg:block bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 p-12 overflow-hidden">
           <div className="absolute inset-0 bg-grid-white/[0.2] bg-[size:20px_20px]" />
-          <div className="absolute inset-0 bg-gradient-to-t from-indigo-600 via-transparent to-transparent" />
-          <motion.div
-            animate={{
-              y: [0, -20, 0],
-              x: [0, 10, 0],
-            }}
-            transition={{
-              duration: 8,
-              repeat: Infinity,
-              ease: "easeInOut",
-            }}
-            className="absolute top-20 left-10 w-64 h-64 bg-white/10 rounded-full blur-3xl"
-          />
-          <motion.div
-            animate={{
-              y: [0, 20, 0],
-              x: [0, -10, 0],
-            }}
-            transition={{
-              duration: 7,
-              repeat: Infinity,
-              ease: "easeInOut",
-              delay: 1,
-            }}
-            className="absolute bottom-20 right-10 w-80 h-80 bg-purple-400/20 rounded-full blur-3xl"
-          />
-          <div className="relative h-full flex flex-col justify-center text-white">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-            >
-              <h1 className="text-4xl font-bold mb-4">Join HireFlow</h1>
-              <h2 className="text-5xl font-extrabold mb-6">{isEmployerDefault ? "HR Team" : "Smart Talent"}</h2>
-              <p className="text-lg text-white/80 mb-8 max-w-md">
-                {isEmployerDefault
-                  ? "Your next great hire is just a few clicks away."
-                  : "Let our AI match you with the perfect job opportunities."
-                }
-              </p>
-            </motion.div>
+          
+          <div className="relative h-full flex flex-col justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-white mb-2">HireFlow</h2>
+              <p className="text-white/80 text-sm">AI-powered recruitment</p>
+            </div>
+
+            <div className="space-y-6">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+              >
+                <h3 className="text-3xl font-bold text-white mb-4">
+                  Join the future of hiring
+                </h3>
+                <p className="text-white/90 text-lg">
+                  Create your free account and experience how AI transforms talent acquisition.
+                </p>
+              </motion.div>
+
+              {/* Progress steps - visual indicator */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                    currentStep >= 1 ? 'bg-white text-indigo-600' : 'bg-white/20 text-white'
+                  }`}>
+                    1
+                  </div>
+                  <div className="flex-1">
+                    <p className={`text-sm font-medium ${currentStep >= 1 ? 'text-white' : 'text-white/60'}`}>
+                      Account details
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                    currentStep >= 2 ? 'bg-white text-indigo-600' : 'bg-white/20 text-white'
+                  }`}>
+                    2
+                  </div>
+                  <div className="flex-1">
+                    <p className={`text-sm font-medium ${currentStep >= 2 ? 'text-white' : 'text-white/60'}`}>
+                      Role selection
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Testimonial - social proof [citation:5] */}
+              <div className="pt-6 border-t border-white/20">
+                <p className="text-white/80 text-sm italic">
+                  "HireFlow helped us reduce time-to-hire by 40% while finding better-qualified candidates."
+                </p>
+                <p className="text-white/60 text-xs mt-2">
+                  — Naav lihaa konacha
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -177,137 +245,178 @@ export default function RegisterPage() {
               <h2 className="text-2xl font-semibold text-slate-900 dark:text-white mb-2">
                 {heading}
               </h2>
-              <p className="text-slate-600 dark:text-slate-400">
-                {description}
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {currentStep === 1 && "Create your account"}
+                {currentStep === 2 && "Select your role"}
               </p>
-            </motion.div>
+            </div>
 
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 flex items-start gap-2"
-              >
-                <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
-              </motion.div>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-              >
-                <Label
-                  htmlFor="name"
-                  className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block"
-                >
-                  Full Name
-                </Label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    id="name"
-                    name="name"
-                    type="text"
-                    placeholder="Your name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    className="pl-10 h-11 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg"
-                    required
-                  />
+            <form onSubmit={handleSubmit(onSubmit)}>
+              {error && (
+                <div className="mb-4 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-600" />
+                  <p className="text-sm text-red-800 dark:text-red-400">{error}</p>
                 </div>
-                {errors.name && (
-                  <p className="text-sm text-red-600 dark:text-red-400">
-                    {errors.name}
-                  </p>
-                )}
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-              >
-                <Label
-                  htmlFor="email"
-                  className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block"
-                >
-                  Email Address
-                </Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    placeholder="name@example.com"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    className="pl-10 h-11 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg"
-                    required
-                  />
-                </div>
-                {errors.email && (
-                  <p className="text-sm text-red-600 dark:text-red-400">
-                    {errors.email}
-                  </p>
-                )}
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4 }}
-              >
-                <Label htmlFor="password" className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Password
-                </Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    id="password"
-                    name="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="••••••••"
-                    value={formData.password}
-                    onChange={handleInputChange}
-                    className="pl-10 pr-10 h-11 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-sm"
+              )}
+              
+              <AnimatePresence mode="wait">
+                {/* Step 1: Account Details */}
+                {currentStep === 1 && (
+                  <motion.div
+                    key="step1"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.3 }}
+                    className="space-y-4"
                   >
-                    {showPassword ? "Hide" : "Show"}
-                  </button>
-                </div>
-                {errors.password && (
-                  <p className="text-sm text-red-600 dark:text-red-400">
-                    {errors.password}
-                  </p>
+                    <div className="space-y-2">
+                      <Label htmlFor="fullName">Full name</Label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                        <Input
+                          id="fullName"
+                          {...register("fullName")}
+                          placeholder="John Doe"
+                          className="pl-10 h-11 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl"
+                        />
+                      </div>
+                      {errors.fullName && (
+                        <p className="text-sm text-destructive">{errors.fullName.message}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="email">Work email</Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                        <Input
+                          id="email"
+                          type="email"
+                          {...register("email")}
+                          placeholder="name@company.com"
+                          className="pl-10 h-11 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl"
+                        />
+                      </div>
+                      {errors.email && (
+                        <p className="text-sm text-destructive">{errors.email.message}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="password">Password</Label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                        <Input
+                          id="password"
+                          type={showPassword ? "text" : "password"}
+                          {...register("password")}
+                          placeholder="••••••••"
+                          className="pl-10 h-11 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        >
+                          {showPassword ? "Hide" : "Show"}
+                        </button>
+                      </div>
+                      {errors.password && (
+                        <p className="text-sm text-destructive">{errors.password.message}</p>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Step 2: Role Selection */}
+                {currentStep === 2 && (
+                  <motion.div
+                    key="step2"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.3 }}
+                    className="space-y-4"
+                  >
+                    <div className="space-y-2">
+                      <Label>I am a</Label>
+                      <Controller
+                        control={control}
+                        name="role"
+                        render={({ field }) => (
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <SelectTrigger className="h-11 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-xl">
+                              <SelectValue placeholder="Select your role" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="candidate">Candidate</SelectItem>
+                              <SelectItem value="hr">HR / Recruiter</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                      />
+                    </div>
+
+                    <AnimatePresence>
+                      {selectedRole === "hr" && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.3 }}
+                          className="space-y-2 overflow-hidden"
+                        >
+                          <Label htmlFor="company">Company name</Label>
+                          <div className="relative">
+                            <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                            <Input
+                              id="company"
+                              {...register("company")}
+                              placeholder="Acme Inc."
+                              className="pl-10 h-11 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl"
+                            />
+                          </div>
+                          {errors.company && (
+                            <p className="text-sm text-destructive">{errors.company.message}</p>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
                 )}
               </motion.div>
 
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.6 }}
-              >
-                <Button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full h-11 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-medium rounded-lg shadow-lg shadow-indigo-600/25 hover:shadow-xl hover:shadow-indigo-600/30 transition-all duration-200"
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Registering...
-                    </>
+              {/* Navigation buttons */}
+              <div className="mt-6 space-y-3">
+                <div className="flex gap-3">
+                  {currentStep > 1 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={prevStep}
+                      className="flex-1 h-11 border-slate-200 dark:border-slate-700"
+                    >
+                      Back
+                    </Button>
+                  )}
+                  {(currentStep < totalSteps && selectedRole === "candidate") || (currentStep < 2 && selectedRole === "hr") ? (
+                    <Button
+                      type="button"
+                      onClick={nextStep}
+                      disabled={!isStepValid()}
+                      className="flex-1 h-11 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl shadow-lg shadow-indigo-600/25"
+                    >
+                      Continue <ChevronRight className="ml-2 h-4 w-4" />
+                    </Button>
                   ) : (
-                    "Sign Up"
+                    <Button
+                      type="submit"
+                      disabled={!isStepValid()}
+                      className="flex-1 h-11 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl shadow-lg shadow-indigo-600/25"
+                    >
+                      Create Account <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
                   )}
                 </Button>
               </motion.div>

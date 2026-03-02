@@ -103,7 +103,7 @@ export default function Home() {
                   whileTap={{ scale: 0.95 }}
                 >
                   <Button size="lg" asChild>
-                    <Link href="/register?type=hr">
+                    <Link href="/register?role=hr">
                       For HR <ArrowRight className="ml-2 h-4 w-4" />
                     </Link>
                   </Button>
@@ -113,8 +113,18 @@ export default function Home() {
                   whileTap={{ scale: 0.95 }}
                 >
                   <Button size="lg" variant="outline" asChild>
-                    <Link href="/register?type=candidate">
+                    <Link href="/register?role=candidate">
                       For Candidates <ArrowRight className="ml-2 h-4 w-4" />
+                    </Link>
+                  </Button>
+                </motion.div>
+                <motion.div
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Button size="lg" variant="secondary" asChild>
+                    <Link href="/login">
+                      Login
                     </Link>
                   </Button>
                 </motion.div>
@@ -352,7 +362,7 @@ export default function Home() {
               className="flex flex-col sm:flex-row gap-4 justify-center"
             >
               <Button size="lg" variant="secondary" asChild>
-                <Link href="/signup">
+                <Link href="/register">
                   Get Started <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
               </Button>

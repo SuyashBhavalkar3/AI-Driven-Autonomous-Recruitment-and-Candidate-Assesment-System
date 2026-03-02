@@ -4,7 +4,21 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
-import { Briefcase, FileText, Bell, Award, Clock, ArrowRight, Target } from "lucide-react";
+import { Briefcase, FileText, Bell, Award, Clock, ArrowRight, Target, TrendingUp } from "lucide-react";
+import { ProfileCompletionCard } from "@/components/ProfileCompletionCard";
+import { calculateProfileCompletion, UserProfile } from "@/lib/profileCompletion";
+
+// Mock user profile data - replace with actual data from backend
+const mockUserProfile: UserProfile = {
+  fullName: "John Doe",
+  email: "john@example.com",
+  phone: "",
+  location: "",
+  bio: "",
+  skills: [],
+  resume: "",
+  experiences: [],
+};
 
 const stats = [
   { label: "Applications", value: "12", icon: FileText, color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-950/30" },
@@ -25,6 +39,20 @@ const upcomingTasks = [
   { id: 3, title: "Respond to Offer", company: "CloudTech", due: "Mar 10, 2024", priority: "high" },
 ];
 
+const applicationTrend = [
+  { month: "Jan", count: 2 },
+  { month: "Feb", count: 4 },
+  { month: "Mar", count: 6 },
+];
+
+const statusDistribution = [
+  { status: "Under Review", count: 4, color: "bg-blue-500" },
+  { status: "Assessment", count: 3, color: "bg-purple-500" },
+  { status: "Interview", count: 2, color: "bg-indigo-500" },
+  { status: "Offer", count: 1, color: "bg-green-500" },
+  { status: "Rejected", count: 2, color: "bg-red-500" },
+];
+
 const statusColors = {
   assessment_pending: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
   interview_scheduled: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
@@ -32,6 +60,12 @@ const statusColors = {
 };
 
 export default function CandidateDashboard() {
+  const maxCount = Math.max(...applicationTrend.map(d => d.count));
+  const totalApplications = statusDistribution.reduce((sum, item) => sum + item.count, 0);
+  
+  // Calculate profile completion
+  const profileStatus = calculateProfileCompletion(mockUserProfile);
+
   return (
     <div className="min-h-screen">
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -58,8 +92,69 @@ export default function CandidateDashboard() {
           ))}
         </div>
 
+        {/* Charts Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          {/* Application Trend Chart */}
+          <Card className="border-slate-200 dark:border-slate-800">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-slate-900 dark:text-white">Application Trend</h3>
+                <TrendingUp className="h-5 w-5 text-green-600" />
+              </div>
+              <div className="space-y-4">
+                {applicationTrend.map((data) => (
+                  <div key={data.month}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm text-slate-600 dark:text-slate-400">{data.month}</span>
+                      <span className="text-sm font-medium text-slate-900 dark:text-white">{data.count}</span>
+                    </div>
+                    <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+                      <div 
+                        className="bg-gradient-to-r from-blue-500 to-indigo-500 h-2 rounded-full transition-all duration-500"
+                        style={{ width: `${(data.count / maxCount) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Status Distribution Chart */}
+          <Card className="border-slate-200 dark:border-slate-800">
+            <CardContent className="p-6">
+              <h3 className="font-semibold text-slate-900 dark:text-white mb-4">Application Status</h3>
+              <div className="space-y-3">
+                {statusDistribution.map((item) => (
+                  <div key={item.status} className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm text-slate-600 dark:text-slate-400">{item.status}</span>
+                        <span className="text-sm font-medium text-slate-900 dark:text-white">
+                          {item.count} ({Math.round((item.count / totalApplications) * 100)}%)
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+                        <div 
+                          className={`${item.color} h-2 rounded-full transition-all duration-500`}
+                          style={{ width: `${(item.count / totalApplications) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-4">
+            {/* Profile Completion Card */}
+            {!profileStatus.isComplete && (
+              <ProfileCompletionCard status={profileStatus} showDetails={true} />
+            )}
+
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Recent Applications</h2>
               <Link href="/candidate/applications">

@@ -5,7 +5,22 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { Clock, CheckCircle, AlertTriangle, Send } from "lucide-react";
+import { Clock, CheckCircle, AlertTriangle, Send, AlertCircle as AlertIcon } from "lucide-react";
+import { calculateProfileCompletion, UserProfile } from "@/lib/profileCompletion";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+
+// Mock user profile - replace with actual data from backend
+const mockUserProfile: UserProfile = {
+  fullName: "John Doe",
+  email: "john@example.com",
+  phone: "",
+  location: "",
+  bio: "",
+  skills: [],
+  resume: "",
+  experiences: [],
+};
 
 const assessment = {
   company: "TechCorp",
@@ -47,11 +62,25 @@ const assessment = {
 };
 
 export default function AssessmentPage() {
+  const router = useRouter();
   const [started, setStarted] = useState(false);
   const [timeLeft, setTimeLeft] = useState(assessment.duration);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<Record<number, any>>({});
   const [submitted, setSubmitted] = useState(false);
+  
+  // Check profile completion
+  const profileStatus = calculateProfileCompletion(mockUserProfile);
+
+  // Redirect if profile incomplete
+  useEffect(() => {
+    if (!profileStatus.isComplete) {
+      const timer = setTimeout(() => {
+        router.push('/candidate/profile');
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [profileStatus.isComplete, router]);
 
   useEffect(() => {
     if (started && !submitted && timeLeft > 0) {
@@ -78,6 +107,45 @@ export default function AssessmentPage() {
   const question = assessment.questions[currentQuestion];
 
   if (!started) {
+    // Show profile incomplete warning
+    if (!profileStatus.isComplete) {
+      return (
+        <div className="min-h-screen flex items-center justify-center">
+          <Card className="max-w-2xl w-full border-amber-200 dark:border-amber-800">
+            <CardHeader>
+              <CardTitle className="text-2xl flex items-center gap-2">
+                <AlertIcon className="h-6 w-6 text-amber-600" />
+                Complete Your Profile First
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="bg-amber-50 dark:bg-amber-950/30 p-4 rounded-lg">
+                <p className="text-amber-900 dark:text-amber-300 mb-4">
+                  You need to complete your profile (100%) before taking assessments. Redirecting to profile page in 3 seconds...
+                </p>
+                <div className="space-y-2">
+                  <p className="font-semibold text-amber-900 dark:text-amber-300">Missing Information:</p>
+                  <ul className="list-disc list-inside text-sm text-amber-800 dark:text-amber-400">
+                    {profileStatus.missingFields.map(field => (
+                      <li key={field}>{field}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <Link href="/candidate/profile" className="flex-1">
+                  <Button className="w-full">Complete Profile</Button>
+                </Link>
+                <Link href="/candidate/applications" className="flex-1">
+                  <Button variant="outline" className="w-full">Back to Applications</Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-2xl w-full border-slate-200 dark:border-slate-800">

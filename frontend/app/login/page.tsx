@@ -3,66 +3,22 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Mail, Lock, AlertCircle, Loader2 } from "lucide-react";
-import { authApi } from "@/lib/api";
-import * as z from "zod";
-
-const loginSchema = z.object({
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(1, "Password is required"),
-  userType: z.enum(["hr", "candidate"], { message: "Please select a user type" }),
-});
-
-type LoginFormData = z.infer<typeof loginSchema>;
+import { Mail, Lock, ArrowRight, Loader2, AlertCircle } from "lucide-react";
+import { loginUser } from "@/lib/api";
+import { setAuthToken, setUserRole } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
-  
-  const [formData, setFormData] = useState<LoginFormData>({
-    email: "",
-    password: "",
-    userType: "candidate",
-  });
   const [isLoading, setIsLoading] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState<'hr' | 'candidate'>('candidate');
   const [error, setError] = useState<string | null>(null);
-  const [errors, setErrors] = useState<Partial<Record<keyof LoginFormData, string>>>({});
-  const [showPassword, setShowPassword] = useState(false);
-
-  const validateForm = (): boolean => {
-    try {
-      loginSchema.parse(formData);
-      setErrors({});
-      return true;
-    } catch (err) {
-      if (err instanceof z.ZodError) {
-        const newErrors: Partial<Record<keyof LoginFormData, string>> = {};
-        err.issues.forEach((error) => {
-          const path = error.path[0] as keyof LoginFormData;
-          newErrors[path] = error.message;
-        });
-        setErrors(newErrors);
-      }
-      return false;
-    }
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-    if (errors[name as keyof LoginFormData]) {
-      setErrors((prev) => ({
-        ...prev,
-        [name]: undefined,
-      }));
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,23 +29,21 @@ export default function LoginPage() {
     }
 
     setIsLoading(true);
+    setError(null);
+
     try {
-      const response = await authApi.login({
-        email: formData.email,
-        password: formData.password,
-        is_employer: formData.userType === "hr",
+      const authResponse = await loginUser({
+        email,
+        password,
+        role,
       });
 
-      // Store token and user type
-      localStorage.setItem("access_token", response.access_token);
-      localStorage.setItem("user_type", formData.userType);
+      setAuthToken(authResponse.access_token);
+      setUserRole(role);
 
-      // Redirect to appropriate dashboard
-      const dashboardPath = formData.userType === "hr" ? "/hr" : "/candidate";
-      router.push(dashboardPath);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed. Please check your credentials.");
-    } finally {
+      router.push(role === 'hr' ? '/hr' : '/candidate');
+    } catch (err: any) {
+      setError(err.message || 'Login failed. Please check your credentials.');
       setIsLoading(false);
     }
   };
@@ -206,7 +160,14 @@ export default function LoginPage() {
             )}
 
             {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {error && (
+                <div className="p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-600" />
+                  <p className="text-sm text-red-800 dark:text-red-400">{error}</p>
+                </div>
+              )}
+              
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -274,6 +235,27 @@ export default function LoginPage() {
                 )}
               </motion.div>
 
+              {/* Role Selection */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.35 }}
+              >
+                <Label htmlFor="role" className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">
+                  I am a
+                </Label>
+                <Select value={role} onValueChange={(value: 'hr' | 'candidate') => setRole(value)}>
+                  <SelectTrigger className="h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="candidate">Candidate</SelectItem>
+                    <SelectItem value="hr">HR / Recruiter</SelectItem>
+                  </SelectContent>
+                </Select>
+              </motion.div>
+
+              {/* Remember me */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
