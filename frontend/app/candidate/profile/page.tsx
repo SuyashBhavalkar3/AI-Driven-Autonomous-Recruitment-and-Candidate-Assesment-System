@@ -37,6 +37,15 @@ interface Experience {
   description: string;
 }
 
+interface ValidationErrors {
+  name?: string;
+  email?: string;
+  phone?: string;
+  bio?: string;
+  skills?: string;
+  resume?: string;
+}
+
 export default function CandidateProfile() {
   const [isEditing, setIsEditing] = useState(false);
   const [profilePhoto, setProfilePhoto] = useState<string>("");
@@ -52,6 +61,8 @@ export default function CandidateProfile() {
   const [skillInput, setSkillInput] = useState("");
   const [experiences, setExperiences] = useState<Experience[]>([]);
   const [particles, setParticles] = useState<React.ReactNode[]>([]);
+  const [errors, setErrors] = useState<ValidationErrors>({});
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
   const pageRef = useRef<HTMLDivElement>(null);
   const cardsRef = useRef<HTMLDivElement>(null);
 
@@ -73,6 +84,74 @@ export default function CandidateProfile() {
   };
 
   const profileStatus = calculateProfileCompletion(userProfile);
+
+  // Validation function
+  const validateForm = (): ValidationErrors => {
+    const newErrors: ValidationErrors = {};
+
+    // Name validation
+    if (!formData.name.trim()) {
+      newErrors.name = "Full name is required";
+    }
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!formData.email.trim()) {
+      newErrors.email = "Email is required";
+    } else if (!emailRegex.test(formData.email)) {
+      newErrors.email = "Please enter a valid email address";
+    }
+
+    // Phone validation (optional, but if provided, basic format)
+    if (formData.phone.trim()) {
+      const phoneRegex = /^[\+]?[(]?[0-9]{1,3}[)]?[-\s\.]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{1,4}[-\s\.]?[0-9]{1,9}$/;
+      if (!phoneRegex.test(formData.phone.replace(/\s/g, ''))) {
+        newErrors.phone = "Please enter a valid phone number";
+      }
+    }
+
+    // Bio validation
+    if (!formData.bio.trim()) {
+      newErrors.bio = "Bio is required";
+    } else if (formData.bio.trim().length < 20) {
+      newErrors.bio = "Bio must be at least 20 characters";
+    }
+
+    // Skills validation
+    if (formData.skills.length === 0) {
+      newErrors.skills = "At least one skill is required";
+    } else if (formData.skills.length < 3) {
+      newErrors.skills = "Please add at least 3 skills";
+    }
+
+    // Resume validation
+    if (!resumeFile) {
+      newErrors.resume = "Resume is required";
+    } else {
+      const maxSize = 5 * 1024 * 1024; // 5MB
+      if (resumeFile.size > maxSize) {
+        newErrors.resume = "Resume file size must be less than 5MB";
+      }
+      const allowedTypes = ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
+      if (!allowedTypes.includes(resumeFile.type)) {
+        newErrors.resume = "Resume must be a PDF, DOC, or DOCX file";
+      }
+    }
+
+    return newErrors;
+  };
+
+  // Check if form is valid
+  const isFormValid = () => {
+    return Object.keys(validateForm()).length === 0;
+  };
+
+  // Handle blur for validation
+  const handleBlur = (field: string) => {
+    setTouched({ ...touched, [field]: true });
+    const validationErrors = validateForm();
+    setErrors(validationErrors);
+  };
 
   // Generate decorative particles
   useEffect(() => {
@@ -133,18 +212,29 @@ export default function CandidateProfile() {
     const file = e.target.files?.[0];
     if (file) {
       setResumeFile(file);
+      // Clear resume error if exists
+      setErrors({ ...errors, resume: undefined });
+      setTouched({ ...touched, resume: true });
     }
   };
 
   const addSkill = () => {
     if (skillInput.trim() && !formData.skills.includes(skillInput.trim())) {
-      setFormData({ ...formData, skills: [...formData.skills, skillInput.trim()] });
+      const updatedSkills = [...formData.skills, skillInput.trim()];
+      setFormData({ ...formData, skills: updatedSkills });
       setSkillInput("");
+      // Validate skills after change
+      const validationErrors = validateForm();
+      setErrors(validationErrors);
     }
   };
 
   const removeSkill = (skill: string) => {
-    setFormData({ ...formData, skills: formData.skills.filter((s) => s !== skill) });
+    const updatedSkills = formData.skills.filter((s) => s !== skill);
+    setFormData({ ...formData, skills: updatedSkills });
+    // Validate skills after change
+    const validationErrors = validateForm();
+    setErrors(validationErrors);
   };
 
   const addExperience = () => {
@@ -172,8 +262,28 @@ export default function CandidateProfile() {
   };
 
   const handleSave = () => {
-    console.log("Saving profile:", { formData, profilePhoto, resumeFile, experiences });
-    setIsEditing(false);
+    const validationErrors = validateForm();
+    setErrors(validationErrors);
+    setTouched({
+      name: true,
+      email: true,
+      phone: true,
+      bio: true,
+      skills: true,
+      resume: true,
+    });
+
+    if (Object.keys(validationErrors).length === 0) {
+      console.log("Saving profile:", { formData, profilePhoto, resumeFile, experiences });
+      setIsEditing(false);
+      // Clear touched after successful save
+      setTouched({});
+    } else {
+      // Scroll to first error
+      const firstErrorField = Object.keys(validationErrors)[0];
+      const element = document.getElementById(`field-${firstErrorField}`);
+      element?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
   };
 
   return (
@@ -277,13 +387,19 @@ export default function CandidateProfile() {
                     <Button
                       onClick={handleSave}
                       size="sm"
-                      className="bg-[#B8915C] hover:bg-[#9F7A4F]"
+                      className="bg-[#B8915C] hover:bg-[#9F7A4F] disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={!isFormValid()}
                     >
                       <Save className="h-4 w-4 mr-2" />
                       Save
                     </Button>
                     <Button
-                      onClick={() => setIsEditing(false)}
+                      onClick={() => {
+                        setIsEditing(false);
+                        // Reset to original data (optional)
+                        setErrors({});
+                        setTouched({});
+                      }}
                       variant="outline"
                       size="sm"
                       className="border-[#D6CDC2] text-[#4A443C]"
@@ -331,14 +447,30 @@ export default function CandidateProfile() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-[#4A443C] dark:text-slate-300">Full Name</Label>
+                <div className="space-y-2" id="field-name">
+                  <Label className="text-[#4A443C] dark:text-slate-300">
+                    Full Name <span className="text-red-500">*</span>
+                  </Label>
                   {isEditing ? (
-                    <Input
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="bg-white/50 dark:bg-slate-800/50 border-[#D6CDC2] focus:border-[#B8915C]"
-                    />
+                    <>
+                      <Input
+                        value={formData.name}
+                        onChange={(e) => {
+                          setFormData({ ...formData, name: e.target.value });
+                          if (touched.name) {
+                            const validationErrors = validateForm();
+                            setErrors(validationErrors);
+                          }
+                        }}
+                        onBlur={() => handleBlur("name")}
+                        className={`bg-white/50 dark:bg-slate-800/50 border ${
+                          touched.name && errors.name ? "border-red-500" : "border-[#D6CDC2] focus:border-[#B8915C]"
+                        }`}
+                      />
+                      {touched.name && errors.name && (
+                        <p className="text-sm text-red-600 mt-1">{errors.name}</p>
+                      )}
+                    </>
                   ) : (
                     <div className="flex items-center gap-2 text-[#2D2A24] dark:text-white">
                       <User className="h-4 w-4 text-[#A69A8C]" />
@@ -347,15 +479,31 @@ export default function CandidateProfile() {
                   )}
                 </div>
 
-                <div className="space-y-2">
-                  <Label className="text-[#4A443C] dark:text-slate-300">Email</Label>
+                <div className="space-y-2" id="field-email">
+                  <Label className="text-[#4A443C] dark:text-slate-300">
+                    Email <span className="text-red-500">*</span>
+                  </Label>
                   {isEditing ? (
-                    <Input
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="bg-white/50 dark:bg-slate-800/50 border-[#D6CDC2] focus:border-[#B8915C]"
-                    />
+                    <>
+                      <Input
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => {
+                          setFormData({ ...formData, email: e.target.value });
+                          if (touched.email) {
+                            const validationErrors = validateForm();
+                            setErrors(validationErrors);
+                          }
+                        }}
+                        onBlur={() => handleBlur("email")}
+                        className={`bg-white/50 dark:bg-slate-800/50 border ${
+                          touched.email && errors.email ? "border-red-500" : "border-[#D6CDC2] focus:border-[#B8915C]"
+                        }`}
+                      />
+                      {touched.email && errors.email && (
+                        <p className="text-sm text-red-600 mt-1">{errors.email}</p>
+                      )}
+                    </>
                   ) : (
                     <div className="flex items-center gap-2 text-[#2D2A24] dark:text-white">
                       <Mail className="h-4 w-4 text-[#A69A8C]" />
@@ -364,14 +512,29 @@ export default function CandidateProfile() {
                   )}
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2" id="field-phone">
                   <Label className="text-[#4A443C] dark:text-slate-300">Phone</Label>
                   {isEditing ? (
-                    <Input
-                      value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      className="bg-white/50 dark:bg-slate-800/50 border-[#D6CDC2] focus:border-[#B8915C]"
-                    />
+                    <>
+                      <Input
+                        value={formData.phone}
+                        onChange={(e) => {
+                          setFormData({ ...formData, phone: e.target.value });
+                          if (touched.phone) {
+                            const validationErrors = validateForm();
+                            setErrors(validationErrors);
+                          }
+                        }}
+                        onBlur={() => handleBlur("phone")}
+                        className={`bg-white/50 dark:bg-slate-800/50 border ${
+                          touched.phone && errors.phone ? "border-red-500" : "border-[#D6CDC2] focus:border-[#B8915C]"
+                        }`}
+                        placeholder="e.g., +1 234 567 8900"
+                      />
+                      {touched.phone && errors.phone && (
+                        <p className="text-sm text-red-600 mt-1">{errors.phone}</p>
+                      )}
+                    </>
                   ) : (
                     <div className="flex items-center gap-2 text-[#2D2A24] dark:text-white">
                       <Phone className="h-4 w-4 text-[#A69A8C]" />
@@ -396,18 +559,32 @@ export default function CandidateProfile() {
                   )}
                 </div>
 
-                <div className="space-y-2 md:col-span-2">
+                <div className="space-y-2 md:col-span-2" id="field-bio">
                   <Label className="text-[#4A443C] dark:text-slate-300">
                     Bio / Summary <span className="text-red-500">*</span>
                   </Label>
                   {isEditing ? (
-                    <Textarea
-                      value={formData.bio}
-                      onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-                      rows={4}
-                      placeholder="Write a brief summary about yourself (minimum 20 characters)..."
-                      className="bg-white/50 dark:bg-slate-800/50 border-[#D6CDC2] focus:border-[#B8915C]"
-                    />
+                    <>
+                      <Textarea
+                        value={formData.bio}
+                        onChange={(e) => {
+                          setFormData({ ...formData, bio: e.target.value });
+                          if (touched.bio) {
+                            const validationErrors = validateForm();
+                            setErrors(validationErrors);
+                          }
+                        }}
+                        onBlur={() => handleBlur("bio")}
+                        rows={4}
+                        placeholder="Write a brief summary about yourself (minimum 20 characters)..."
+                        className={`bg-white/50 dark:bg-slate-800/50 border ${
+                          touched.bio && errors.bio ? "border-red-500" : "border-[#D6CDC2] focus:border-[#B8915C]"
+                        }`}
+                      />
+                      {touched.bio && errors.bio && (
+                        <p className="text-sm text-red-600 mt-1">{errors.bio}</p>
+                      )}
+                    </>
                   ) : (
                     <p className="text-[#2D2A24] dark:text-white">
                       {formData.bio || "Not provided"}
@@ -415,44 +592,49 @@ export default function CandidateProfile() {
                   )}
                 </div>
 
-                <div className="space-y-2 md:col-span-2">
+                <div className="space-y-2 md:col-span-2" id="field-skills">
                   <Label className="text-[#4A443C] dark:text-slate-300">
                     Skills <span className="text-red-500">* (minimum 3)</span>
                   </Label>
                   {isEditing ? (
-                    <div className="space-y-2">
-                      <div className="flex gap-2">
-                        <Input
-                          value={skillInput}
-                          onChange={(e) => setSkillInput(e.target.value)}
-                          onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), addSkill())}
-                          placeholder="Type a skill and press Enter"
-                          className="bg-white/50 dark:bg-slate-800/50 border-[#D6CDC2] focus:border-[#B8915C]"
-                        />
-                        <Button
-                          type="button"
-                          onClick={addSkill}
-                          size="sm"
-                          className="bg-[#B8915C] hover:bg-[#9F7A4F]"
-                        >
-                          <Plus className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {formData.skills.map((skill, i) => (
-                          <Badge
-                            key={i}
-                            className="bg-[#B8915C]/10 text-[#B8915C] border-none gap-1"
+                    <>
+                      <div className="space-y-2">
+                        <div className="flex gap-2">
+                          <Input
+                            value={skillInput}
+                            onChange={(e) => setSkillInput(e.target.value)}
+                            onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), addSkill())}
+                            placeholder="Type a skill and press Enter"
+                            className="bg-white/50 dark:bg-slate-800/50 border-[#D6CDC2] focus:border-[#B8915C]"
+                          />
+                          <Button
+                            type="button"
+                            onClick={addSkill}
+                            size="sm"
+                            className="bg-[#B8915C] hover:bg-[#9F7A4F]"
                           >
-                            {skill}
-                            <X
-                              className="h-3 w-3 cursor-pointer hover:text-red-600"
-                              onClick={() => removeSkill(skill)}
-                            />
-                          </Badge>
-                        ))}
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {formData.skills.map((skill, i) => (
+                            <Badge
+                              key={i}
+                              className="bg-[#B8915C]/10 text-[#B8915C] border-none gap-1"
+                            >
+                              {skill}
+                              <X
+                                className="h-3 w-3 cursor-pointer hover:text-red-600"
+                                onClick={() => removeSkill(skill)}
+                              />
+                            </Badge>
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                      {touched.skills && errors.skills && (
+                        <p className="text-sm text-red-600 mt-1">{errors.skills}</p>
+                      )}
+                    </>
                   ) : (
                     <div className="flex flex-wrap gap-2">
                       {formData.skills.length > 0 ? (
@@ -478,46 +660,51 @@ export default function CandidateProfile() {
                 Resume <span className="text-red-500">*</span>
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent id="field-resume">
               {resumeFile || !isEditing ? (
-                <div className="flex items-center justify-between p-4 bg-[#F1E9E0] dark:bg-slate-800/50 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-[#B8915C]/10 rounded">
-                      <FileText className="h-5 w-5 text-[#B8915C]" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-[#2D2A24] dark:text-white">
-                        {resumeFile ? resumeFile.name : "No resume uploaded"}
-                      </p>
-                      {resumeFile && (
-                        <p className="text-sm text-[#5A534A] dark:text-slate-400">
-                          {(resumeFile.size / 1024).toFixed(1)} KB
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between p-4 bg-[#F1E9E0] dark:bg-slate-800/50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-[#B8915C]/10 rounded">
+                        <FileText className="h-5 w-5 text-[#B8915C]" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-[#2D2A24] dark:text-white">
+                          {resumeFile ? resumeFile.name : "No resume uploaded"}
                         </p>
-                      )}
+                        {resumeFile && (
+                          <p className="text-sm text-[#5A534A] dark:text-slate-400">
+                            {(resumeFile.size / 1024).toFixed(1)} KB
+                          </p>
+                        )}
+                      </div>
                     </div>
+                    {isEditing && (
+                      <div>
+                        <input
+                          type="file"
+                          accept=".pdf,.doc,.docx"
+                          onChange={handleResumeUpload}
+                          className="hidden"
+                          id="resume-upload"
+                        />
+                        <label htmlFor="resume-upload">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            onClick={() => document.getElementById("resume-upload")?.click()}
+                            className="border-[#D6CDC2] text-[#4A443C] hover:bg-[#F1E9E0]"
+                          >
+                            <Upload className="h-4 w-4 mr-2" />
+                            {resumeFile ? "Update" : "Upload"}
+                          </Button>
+                        </label>
+                      </div>
+                    )}
                   </div>
-                  {isEditing && (
-                    <div>
-                      <input
-                        type="file"
-                        accept=".pdf,.doc,.docx"
-                        onChange={handleResumeUpload}
-                        className="hidden"
-                        id="resume-upload"
-                      />
-                      <label htmlFor="resume-upload">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          type="button"
-                          onClick={() => document.getElementById("resume-upload")?.click()}
-                          className="border-[#D6CDC2] text-[#4A443C] hover:bg-[#F1E9E0]"
-                        >
-                          <Upload className="h-4 w-4 mr-2" />
-                          {resumeFile ? "Update" : "Upload"}
-                        </Button>
-                      </label>
-                    </div>
+                  {isEditing && touched.resume && errors.resume && (
+                    <p className="text-sm text-red-600 mt-1">{errors.resume}</p>
                   )}
                 </div>
               ) : (
@@ -537,12 +724,19 @@ export default function CandidateProfile() {
                   <label htmlFor="resume-upload-empty">
                     <Button
                       type="button"
-                      onClick={() => document.getElementById("resume-upload-empty")?.click()}
+                      onClick={() => {
+                        document.getElementById("resume-upload-empty")?.click();
+                        // Mark as touched when attempting to upload
+                        setTouched({ ...touched, resume: true });
+                      }}
                       className="bg-[#B8915C] hover:bg-[#9F7A4F]"
                     >
                       Choose File
                     </Button>
                   </label>
+                  {isEditing && touched.resume && errors.resume && (
+                    <p className="text-sm text-red-600 mt-4">{errors.resume}</p>
+                  )}
                 </div>
               )}
             </CardContent>
