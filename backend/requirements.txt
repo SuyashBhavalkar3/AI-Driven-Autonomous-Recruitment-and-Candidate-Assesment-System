@@ -7,3 +7,7 @@ bcrypt==3.2.2
 python-dotenv
 pydantic[email]
 pyJWT
+cloudinary
+groq 
+pdfminer.six
+python-docx
