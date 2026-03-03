@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from authentication.database import init_db
 from authentication.routes import router as auth_router
+from ai_interview_bot.routes import router as ai_router
 
 app = FastAPI(title="Project1 API")
 
@@ -23,3 +24,4 @@ app.include_router(
     prefix="/v1/auth",
     tags=["Auth"]
 )
+app.include_router(ai_router, prefix="/v1/ai-bot")

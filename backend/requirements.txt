@@ -7,3 +7,7 @@ bcrypt==3.2.2
 python-dotenv
 pydantic[email]
 pyJWT
+openai
+pydub
+aiofiles
+websockets
