@@ -11,3 +11,5 @@ openai
 pydub
 aiofiles
 websockets
+requests
+gtts

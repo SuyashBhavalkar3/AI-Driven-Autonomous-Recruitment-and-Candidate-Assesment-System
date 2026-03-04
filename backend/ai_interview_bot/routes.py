@@ -1,5 +1,5 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from .service import handle_audio_message
+from .service import handle_audio_message, stream_tts_audio
 from openai import OpenAI
 import os
 import base64
@@ -21,15 +21,12 @@ I will be your interviewer today.
 To begin, could you please introduce yourself?"""
 
     try:
-        speech = client.audio.speech.create(
-            model="gpt-4o-mini-tts",
-            voice="alloy",
-            input=greeting_text
-        )
-
-        audio_response = base64.b64encode(
-            speech.read()
-        ).decode("utf-8")
+        # Get speech from Sarvam API using streaming
+        try:
+            audio_response = stream_tts_audio(greeting_text)
+        except Exception as e:
+            print(f"TTS failed for greeting: {e}")
+            audio_response = ""
 
         await websocket.send_json({
             "type": "ai_response",
@@ -74,16 +71,12 @@ Ask only ONE question at a time."""
                 ai_text = completion.choices[0].message.content
                 conversation.append({"role": "assistant", "content": ai_text})
                 
-                # Convert to speech
-                speech = client.audio.speech.create(
-                    model="gpt-4o-mini-tts",
-                    voice="alloy",
-                    input=ai_text
-                )
-
-                audio_response = base64.b64encode(
-                    speech.read()
-                ).decode("utf-8")
+                # Convert to speech using Sarvam API with streaming
+                try:
+                    audio_response = stream_tts_audio(ai_text)
+                except Exception as e:
+                    print(f"TTS failed for response: {e}")
+                    audio_response = ""
 
                 await websocket.send_json({
                     "type": "ai_response",

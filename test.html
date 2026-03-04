@@ -158,16 +158,25 @@
             // Auto-play audio
             if(msg.audio){
               try {
-                const byteChars = atob(msg.audio);
-                const byteNumbers = new Array(byteChars.length);
-                for(let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
-                const byteArray = new Uint8Array(byteNumbers);
-                const blob = new Blob([byteArray], {type: 'audio/mpeg'});
-                const audioUrl = URL.createObjectURL(blob);
-                const audio = new Audio(audioUrl);
-                audio.play().catch(e => log('Audio play error: ' + e));
+                // Create audio URL from base64 with proper MIME type
+                const audioDataUrl = `data:audio/mpeg;base64,${msg.audio}`;
+                const audio = new Audio(audioDataUrl);
+                
+                audio.oncanplay = () => {
+                  log('✓ Audio ready to play');
+                };
+                
+                audio.onerror = (e) => {
+                  log(`✗ Failed to load audio: ${audio.error?.message || 'unknown error'}`);
+                  // Try alternative MIME types if first attempt fails
+                  const audioDataUrl2 = `data:audio/mpeg;base64,${msg.audio}`;
+                  const audio2 = new Audio(audioDataUrl2);
+                  audio2.play().catch(e => log(`Alternative MIME failed: ${e}`));
+                };
+                
+                audio.play().catch(e => log(`Audio play error: ${e}`));
               } catch(err){
-                log('Audio decode error: ' + err);
+                log(`Audio decode error: ${err}`);
               }
             }
           } else if(msg.type === 'error'){
