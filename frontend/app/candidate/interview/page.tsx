@@ -20,6 +20,7 @@ import {
   EyeOff,
   Volume2,
   VolumeX,
+  Repeat,
 } from "lucide-react";
 import * as faceapi from "face-api.js";
 
@@ -28,31 +29,45 @@ const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 const CLOUDINARY_UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
 
 // Voice detection thresholds
-const SPEECH_DETECTION_THRESHOLD = 0.01;      // Volume level (0-1) considered as speech
-const SILENCE_DURATION_ORAL = 10;             // Seconds of silence before violation during oral
-const SPEECH_DURATION_CODING = 5;              // Seconds of speech before violation during coding
+const SPEECH_DETECTION_THRESHOLD = 0.01;
+const SILENCE_DURATION_ORAL = 10;
+const SPEECH_DURATION_CODING = 5;
 
-const interview = {
-  company: "TechCorp",
-  position: "Senior Frontend Developer",
-  questions: [
+// Mock AI question generator – replace with a real API call (e.g., OpenAI)
+const generateQuestionsFromJD = (jobDescription: string) => {
+  // In a real app, you would send the JD to an AI service and get structured questions.
+  // This is a mock that returns a fixed set of questions for demonstration.
+  const keywords = jobDescription.toLowerCase();
+  const hasReact = keywords.includes("react");
+  const hasNode = keywords.includes("node");
+  const hasPython = keywords.includes("python");
+
+  return [
     {
       id: 1,
       type: "oral",
-      question: "Tell me about yourself and your experience with React.",
+      question: hasReact
+        ? "Tell me about your experience with React and how you handle state management."
+        : "Describe your experience with modern frontend frameworks.",
       duration: 120,
     },
     {
       id: 2,
       type: "coding",
-      question: "Write a function to find the longest palindromic substring in a given string.",
+      question: hasNode
+        ? "Write a function that debounces API calls in JavaScript."
+        : "Write a function to find the longest palindromic substring in a given string.",
       duration: 900,
-      starterCode: `function longestPalindrome(s) {\n  // Your code here\n}\n\nconsole.log(longestPalindrome("babad"));`,
+      starterCode: hasNode
+        ? `function debounce(func, wait) {\n  // Your code here\n}`
+        : `function longestPalindrome(s) {\n  // Your code here\n}\n\nconsole.log(longestPalindrome("babad"));`,
     },
     {
       id: 3,
       type: "oral",
-      question: "Explain the concept of closures in JavaScript with an example.",
+      question: hasPython
+        ? "Explain how Python's GIL affects multithreading."
+        : "Explain the concept of closures in JavaScript with an example.",
       duration: 180,
     },
     {
@@ -62,13 +77,19 @@ const interview = {
       duration: 600,
       starterCode: `function flattenArray(arr) {\n  // Your code here\n}\n\nconsole.log(flattenArray([1, [2, [3, 4], 5]]));`,
     },
-  ],
+  ];
 };
 
 export default function InterviewPage() {
+  // Step 1: Job description input
+  const [jobDescription, setJobDescription] = useState("");
+  const [interviewQuestions, setInterviewQuestions] = useState<any[]>([]);
+  const [jdSubmitted, setJdSubmitted] = useState(false);
+
+  // Interview state
   const [started, setStarted] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(interview.questions[0].duration);
+  const [timeLeft, setTimeLeft] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [isMicOn, setIsMicOn] = useState(true);
@@ -89,6 +110,9 @@ export default function InterviewPage() {
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
   const [audioAnalyser, setAudioAnalyser] = useState<AnalyserNode | null>(null);
   const [voiceViolationInProgress, setVoiceViolationInProgress] = useState(false);
+
+  // TTS reference
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -136,7 +160,14 @@ export default function InterviewPage() {
     }
   }, [isRecording, timeLeft, completed, disqualified, currentQuestion]);
 
-  // Proctoring: visibility change (tab switching / minimize)
+  // Speak the current question when it changes
+  useEffect(() => {
+    if (started && interviewQuestions.length > 0 && !disqualified && !completed) {
+      speakQuestion(interviewQuestions[currentQuestion].question);
+    }
+  }, [currentQuestion, started, interviewQuestions]);
+
+  // Proctoring: visibility change
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) {
@@ -165,7 +196,7 @@ export default function InterviewPage() {
     };
   }, []);
 
-  // Proctoring: periodic face check (starts after reference captured)
+  // Proctoring: periodic face check
   useEffect(() => {
     if (started && referenceDescriptor && !completed && !disqualified) {
       startFaceCheck();
@@ -175,7 +206,7 @@ export default function InterviewPage() {
     return () => stopFaceCheck();
   }, [started, referenceDescriptor, completed, disqualified]);
 
-  // Proctoring: voice monitoring (starts after camera/audio is ready)
+  // Proctoring: voice monitoring
   useEffect(() => {
     if (started && isMicOn && !completed && !disqualified && videoRef.current?.srcObject) {
       setupVoiceMonitoring();
@@ -187,7 +218,6 @@ export default function InterviewPage() {
 
   // Reset timers when question changes
   useEffect(() => {
-    // Clear any pending voice timers
     if (silenceTimer) clearTimeout(silenceTimer);
     if (speechTimer) clearTimeout(speechTimer);
     setSilenceTimer(null);
@@ -200,7 +230,29 @@ export default function InterviewPage() {
     if (faceCheckInterval.current) clearInterval(faceCheckInterval.current);
   };
 
-  // Capture reference face and upload to Cloudinary
+  // TTS function
+  const speakQuestion = (text: string) => {
+    if (!window.speechSynthesis) {
+      console.warn("Text-to-speech not supported");
+      return;
+    }
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "en-US";
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utteranceRef.current = utterance;
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const repeatQuestion = () => {
+    if (interviewQuestions.length > 0) {
+      speakQuestion(interviewQuestions[currentQuestion].question);
+    }
+  };
+
+  // Capture reference face
   const captureReference = async () => {
     if (!videoRef.current || !canvasRef.current || !modelsLoaded) return;
 
@@ -271,7 +323,7 @@ export default function InterviewPage() {
     }, 5000);
   };
 
-  // Set up voice monitoring using Web Audio API
+  // Set up voice monitoring
   const setupVoiceMonitoring = async () => {
     if (!videoRef.current?.srcObject) return;
 
@@ -293,25 +345,21 @@ export default function InterviewPage() {
       setAudioContext(context);
       setAudioAnalyser(analyser);
 
-      // Start monitoring loop
       const checkVoice = () => {
         if (!analyser || completed || disqualified || !isMicOn) return;
 
         analyser.getByteFrequencyData(dataArray);
-        // Calculate average volume
         let sum = 0;
         for (let i = 0; i < bufferLength; i++) {
           sum += dataArray[i];
         }
-        const avg = sum / bufferLength / 256; // Normalize to 0-1
+        const avg = sum / bufferLength / 256;
 
         const speaking = avg > SPEECH_DETECTION_THRESHOLD;
         setIsSpeaking(speaking);
 
-        // Voice proctoring logic based on question type
-        const question = interview.questions[currentQuestion];
-        if (question.type === "oral") {
-          // During oral, expect speech. If silent too long -> violation
+        const question = interviewQuestions[currentQuestion];
+        if (question?.type === "oral") {
           if (!speaking && !voiceViolationInProgress) {
             if (!silenceTimer) {
               const timer = setTimeout(() => {
@@ -321,14 +369,12 @@ export default function InterviewPage() {
               setSilenceTimer(timer);
             }
           } else if (speaking) {
-            // Reset silence timer if speaking
             if (silenceTimer) {
               clearTimeout(silenceTimer);
               setSilenceTimer(null);
             }
           }
-        } else if (question.type === "coding") {
-          // During coding, expect silence. If speech too long -> violation
+        } else if (question?.type === "coding") {
           if (speaking && !voiceViolationInProgress) {
             if (!speechTimer) {
               const timer = setTimeout(() => {
@@ -338,7 +384,6 @@ export default function InterviewPage() {
               setSpeechTimer(timer);
             }
           } else if (!speaking) {
-            // Reset speech timer if silence
             if (speechTimer) {
               clearTimeout(speechTimer);
               setSpeechTimer(null);
@@ -368,7 +413,6 @@ export default function InterviewPage() {
     setVoiceViolationInProgress(false);
   };
 
-  // Add violation and check for disqualification
   const addViolation = (reason: string) => {
     setViolations((prev) => {
       const newCount = prev + 1;
@@ -386,6 +430,7 @@ export default function InterviewPage() {
     stopCamera();
     stopFaceCheck();
     cleanupVoiceMonitoring();
+    window.speechSynthesis.cancel(); // Stop TTS
   };
 
   const startCamera = async () => {
@@ -411,6 +456,18 @@ export default function InterviewPage() {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
+  // Handle job description submission and generate questions
+  const handleJDSubmit = () => {
+    if (!jobDescription.trim()) {
+      alert("Please enter a job description.");
+      return;
+    }
+    const questions = generateQuestionsFromJD(jobDescription);
+    setInterviewQuestions(questions);
+    setJdSubmitted(true);
+  };
+
+  // Start the actual interview
   const handleStart = async () => {
     setStarted(true);
     // Allow camera to initialize
@@ -418,6 +475,8 @@ export default function InterviewPage() {
       const success = await captureReference();
       if (success) {
         setIsRecording(true);
+        setTimeLeft(interviewQuestions[0].duration);
+        speakQuestion(interviewQuestions[0].question);
       } else {
         disqualify("Could not capture reference face");
       }
@@ -427,16 +486,17 @@ export default function InterviewPage() {
   const handleNext = () => {
     if (completed || disqualified) return;
 
-    if (currentQuestion < interview.questions.length - 1) {
+    if (currentQuestion < interviewQuestions.length - 1) {
       const nextQuestion = currentQuestion + 1;
       setCurrentQuestion(nextQuestion);
-      setTimeLeft(interview.questions[nextQuestion].duration);
+      setTimeLeft(interviewQuestions[nextQuestion].duration);
       setAnswer("");
     } else {
       setCompleted(true);
       setIsRecording(false);
       stopCamera();
       cleanupVoiceMonitoring();
+      window.speechSynthesis.cancel();
     }
   };
 
@@ -458,11 +518,35 @@ export default function InterviewPage() {
         track.enabled = !isMicOn;
       });
     }
-    // If mic is turned off manually, add a violation? Might be too strict, but you could if desired.
-    // addViolation("Microphone manually disabled");
   };
 
-  const question = interview.questions[currentQuestion];
+  // Step 1: Job description input screen
+  if (!jdSubmitted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="max-w-2xl w-full border-slate-200 dark:border-slate-800">
+          <CardHeader>
+            <CardTitle className="text-2xl">AI Interview Setup</CardTitle>
+            <p className="text-slate-600 dark:text-slate-400">
+              Paste the job description below to generate tailored interview questions.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <Textarea
+              placeholder="Paste job description here..."
+              value={jobDescription}
+              onChange={(e) => setJobDescription(e.target.value)}
+              rows={10}
+              className="font-mono text-sm"
+            />
+            <Button onClick={handleJDSubmit} className="w-full h-12 text-lg">
+              Generate Interview Questions
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   // Disqualification screen
   if (disqualified) {
@@ -487,14 +571,14 @@ export default function InterviewPage() {
     );
   }
 
-  // Start screen
+  // Start screen (after JD submitted but before interview starts)
   if (!started) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="max-w-2xl w-full border-slate-200 dark:border-slate-800">
           <CardHeader>
-            <CardTitle className="text-2xl">AI Interview - {interview.position}</CardTitle>
-            <p className="text-slate-600 dark:text-slate-400">{interview.company}</p>
+            <CardTitle className="text-2xl">AI Interview - {interviewQuestions[0]?.question.slice(0, 30)}...</CardTitle>
+            <p className="text-slate-600 dark:text-slate-400">Based on your job description</p>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="bg-blue-50 dark:bg-blue-950/30 p-4 rounded-lg">
@@ -507,17 +591,22 @@ export default function InterviewPage() {
                 <li>• Each question has a time limit</li>
                 <li>• AI proctored for fairness</li>
                 <li>• Ensure quiet, well-lit environment</li>
+                <li>• Questions will be spoken aloud – keep volume on</li>
               </ul>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
                 <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Oral Questions</p>
-                <p className="text-2xl font-bold text-blue-600">2</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  {interviewQuestions.filter((q) => q.type === "oral").length}
+                </p>
               </div>
               <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
                 <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Coding Questions</p>
-                <p className="text-2xl font-bold text-purple-600">2</p>
+                <p className="text-2xl font-bold text-purple-600">
+                  {interviewQuestions.filter((q) => q.type === "coding").length}
+                </p>
               </div>
             </div>
 
@@ -568,9 +657,10 @@ export default function InterviewPage() {
   }
 
   // Main interview UI
+  const question = interviewQuestions[currentQuestion];
+
   return (
     <div className="min-h-screen">
-      {/* Hidden canvas for face capture */}
       <canvas ref={canvasRef} width="640" height="480" className="hidden" />
 
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -579,7 +669,7 @@ export default function InterviewPage() {
           <div>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white">AI Interview</h1>
             <p className="text-slate-600 dark:text-slate-400">
-              Question {currentQuestion + 1} of {interview.questions.length}
+              Question {currentQuestion + 1} of {interviewQuestions.length}
             </p>
           </div>
           <div className="flex items-center gap-4">
@@ -622,7 +712,7 @@ export default function InterviewPage() {
 
         {/* Progress bar */}
         <div className="flex items-center gap-2 mb-6">
-          {interview.questions.map((_, index) => (
+          {interviewQuestions.map((_, index) => (
             <div
               key={index}
               className={`flex-1 h-2 rounded-full ${
@@ -674,6 +764,9 @@ export default function InterviewPage() {
                 <div className="flex items-center gap-2 mb-2">
                   <Badge variant="outline">{question.type === "oral" ? "ORAL" : "CODING"}</Badge>
                   <Badge variant="secondary">Question {currentQuestion + 1}</Badge>
+                  <Button variant="ghost" size="sm" onClick={repeatQuestion} className="ml-auto">
+                    <Repeat className="h-4 w-4 mr-1" /> Repeat
+                  </Button>
                 </div>
                 <CardTitle className="text-xl">{question.question}</CardTitle>
               </CardHeader>
@@ -717,7 +810,7 @@ export default function InterviewPage() {
 
             <div className="flex justify-end mt-4">
               <Button onClick={handleNext}>
-                {currentQuestion < interview.questions.length - 1 ? (
+                {currentQuestion < interviewQuestions.length - 1 ? (
                   "Next Question"
                 ) : (
                   <>
