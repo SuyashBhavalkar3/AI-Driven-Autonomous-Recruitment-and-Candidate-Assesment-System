@@ -1,335 +1,81 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>AI Interview Bot - Full Flow Test</title>
-  <style>
-    *{box-sizing:border-box}
-    body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:0;padding:16px;background:#f5f5f5}
-    .container{max-width:900px;margin:0 auto;background:#fff;border-radius:8px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,0.1)}
-    h2{margin-top:0;color:#333}
-    .controls{background:#f0f0f0;padding:12px;border-radius:6px;margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-    button{padding:8px 12px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:#fff;font-size:14px}
-    button:hover:not(:disabled){background:#f0f0f0}
-    button:disabled{opacity:0.5;cursor:not-allowed}
-    input[type="text"]{padding:8px 12px;border:1px solid #ccc;border-radius:4px;font-size:14px}
-    textarea{width:100%;padding:10px;border:1px solid #ccc;border-radius:4px;font-size:14px;font-family:monospace;resize:vertical}
-    #status{padding:4px 8px;border-radius:4px;font-weight:bold;font-size:12px}
-    #status.connected{background:#4caf50;color:#fff}
-    #status.disconnected{background:#f44336;color:#fff}
-    .interview-area{background:#f9f9f9;border:1px solid #ddd;border-radius:6px;padding:16px;margin:16px 0;max-height:400px;overflow-y:auto}
-    .message{margin:10px 0;padding:10px;border-radius:4px}
-    .user-msg{background:#e8f5e9;border-left:4px solid #4caf50}
-    .ai-msg{background:#e3f2fd;border-left:4px solid #2196f3}
-    .ai-msg strong{color:#2196f3}
-    .user-msg strong{color:#4caf50}
-    .input-area{margin:16px 0}
-    .input-area strong{display:block;margin-bottom:8px}
-    .input-controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
-    #sttResult{height:60px}
-    #log{background:#222;color:#0f0;padding:10px;height:150px;overflow-y:auto;white-space:pre-wrap;font-size:12px;border-radius:4px}
-    .option-btn{padding:6px 12px;font-size:13px}
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sarvam Interview Client</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+        #chatMessages { border: 1px solid #ccc; padding: 10px; height: 60vh; overflow-y: auto; }
+        #recordBtn { padding: 10px 20px; margin-top: 10px; }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <h2>🎤 AI Interview Bot - Full Flow Test</h2>
-    
-    <div class="controls">
-      <label>WS URL:</label>
-      <input id="wsUrl" style="flex:1;min-width:250px" value="ws://localhost:8000/v1/ai-bot/ws/interview" />
-      <button id="connectBtn">Connect</button>
-      <button id="disconnectBtn" disabled>Disconnect</button>
-      <span id="status" class="disconnected">● Disconnected</span>
-    </div>
+    <h1>AI Interview (Sarvam &amp; WebSocket)</h1>
+    <div id="chatMessages"></div>
+    <button id="recordBtn">Start Recording</button>
+    <audio id="interviewerAudio" controls hidden></audio>
 
-    <div class="interview-area">
-      <strong>📋 Interview Transcript:</strong>
-      <div id="transcript"></div>
-      <div style="text-align:center;margin-top:10px">
-        <small style="color:#999">Waiting for connection...</small>
-      </div>
-    </div>
+    <script>
+        const ws = new WebSocket('ws://localhost:8000/ws/interview/demo-session');
+        const chatMessages = document.getElementById('chatMessages');
+        const recordBtn = document.getElementById('recordBtn');
+        const interviewerAudio = document.getElementById('interviewerAudio');
+        let mediaRecorder;
+        let audioChunks = [];
 
-    <div class="input-area">
-      <strong>📝 Send Text (Manual or STT Result):</strong>
-      <div class="input-controls">
-        <input id="sendTextInput" style="flex:1" placeholder="Type your response or paste STT result here" />
-        <button id="sendTextBtn">Send Text</button>
-      </div>
-    </div>
-
-    <div class="input-area">
-      <strong>🎙️ Speech-to-Text (STT):</strong>
-      <div class="input-controls">
-        <button id="startStt" class="option-btn">Start STT</button>
-        <button id="stopStt" disabled class="option-btn">Stop STT</button>
-        <button id="sendStt" class="option-btn">Send STT Result</button>
-      </div>
-      <textarea id="sttResult" placeholder="STT transcript will appear here..."></textarea>
-    </div>
-
-    <div class="input-area">
-      <strong>🔊 Record Audio & Send:</strong>
-      <div class="input-controls">
-        <button id="startRec" class="option-btn">Start Recording</button>
-        <button id="stopRec" disabled class="option-btn">Stop Recording</button>
-        <span id="recTime" style="color:#666;font-size:13px"></span>
-      </div>
-    </div>
-
-    <div style="margin-top:20px;border-top:1px solid #ddd;padding-top:12px">
-      <strong>🔍 Debug Logs:</strong>
-      <div id="log"></div>
-    </div>
-  </div>
-
-  <script>
-    let ws = null;
-    let mediaRecorder = null;
-    let recordedChunks = [];
-    let recordStartTime = 0;
-    let recordInterval = null;
-
-    const $ = id => document.getElementById(id);
-    const log = (m) => {
-      const now = new Date().toLocaleTimeString();
-      $('log').textContent += `[${now}] ${m}\n`;
-      $('log').scrollTop = $('log').scrollHeight;
-    };
-
-    function setStatus(connected){
-      const statusEl = $('status');
-      statusEl.textContent = connected ? '● Connected' : '● Disconnected';
-      statusEl.className = connected ? 'connected' : 'disconnected';
-      $('connectBtn').disabled = connected;
-      $('disconnectBtn').disabled = !connected;
-    }
-
-    function addTranscriptMessage(role, text, isAudio = false){
-      const div = document.createElement('div');
-      div.className = 'message ' + (role === 'user' ? 'user-msg' : 'ai-msg');
-      const label = role === 'user' ? '👤 You' : '🤖 Interviewer';
-      div.innerHTML = `<strong>${label}${isAudio ? ' (audio)' : ''}:</strong><p>${escapeHtml(text)}</p>`;
-      $('transcript').appendChild(div);
-      $('transcript').parentElement.scrollTop = $('transcript').parentElement.scrollHeight;
-    }
-
-    function escapeHtml(text){
-      const map = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'};
-      return text.replace(/[&<>"']/g, m => map[m]);
-    }
-
-    $('connectBtn').onclick = () => {
-      const url = $('wsUrl').value.trim();
-      if(!url) return alert('Enter WS URL');
-      log(`Connecting to ${url}`);
-      $('transcript').innerHTML = '';
-      
-      ws = new WebSocket(url);
-      ws.binaryType = 'arraybuffer';
-      
-      ws.onopen = () => {
-        log('✓ WebSocket connected');
-        setStatus(true);
-      };
-      
-      ws.onclose = () => {
-        log('✗ WebSocket closed');
-        setStatus(false);
-      };
-      
-      ws.onerror = (e) => {
-        console.error(e);
-        log('✗ WebSocket error');
-        alert('Connection error - check console and WS URL');
-      };
-      
-      ws.onmessage = (ev) => {
-        try {
-          const msg = JSON.parse(ev.data);
-          
-          if(msg.type === 'ai_response'){
-            const text = msg.text || '';
-            addTranscriptMessage('ai', text, !!msg.audio);
-            log(`AI: ${text.substring(0, 100)}...`);
-            
-            // Auto-play audio
-            if(msg.audio){
-              try {
-                // Create audio URL from base64 with proper MIME type
-                const audioDataUrl = `data:audio/mpeg;base64,${msg.audio}`;
-                const audio = new Audio(audioDataUrl);
-                
-                audio.oncanplay = () => {
-                  log('✓ Audio ready to play');
-                };
-                
-                audio.onerror = (e) => {
-                  log(`✗ Failed to load audio: ${audio.error?.message || 'unknown error'}`);
-                  // Try alternative MIME types if first attempt fails
-                  const audioDataUrl2 = `data:audio/mpeg;base64,${msg.audio}`;
-                  const audio2 = new Audio(audioDataUrl2);
-                  audio2.play().catch(e => log(`Alternative MIME failed: ${e}`));
-                };
-                
-                audio.play().catch(e => log(`Audio play error: ${e}`));
-              } catch(err){
-                log(`Audio decode error: ${err}`);
-              }
+        ws.onopen = () => addMessage('[system] connected to server');
+        ws.onmessage = (event) => {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'interviewer_question') {
+                addMessage('Interviewer: ' + msg.text);
+                if (msg.audio) {
+                    interviewerAudio.src = 'data:audio/mp3;base64,' + msg.audio;
+                    interviewerAudio.hidden = false;
+                    interviewerAudio.play().catch(console.error);
+                }
+            } else if (msg.type === 'execution_result') {
+                addMessage('Execution result: ' + (msg.error || msg.output));
+            } else if (msg.type === 'error') {
+                addMessage('[error] ' + msg.message);
             }
-          } else if(msg.type === 'error'){
-            log(`✗ Error: ${msg.message}`);
-          } else {
-            log(`Received: ${JSON.stringify(msg)}`);
-          }
-        } catch(err){
-          log(`JSON parse error: ${err}`);
+        };
+
+        ws.onclose = () => addMessage('[system] websocket closed');
+
+        function addMessage(text) {
+            const d = document.createElement('div');
+            d.textContent = text;
+            chatMessages.appendChild(d);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
         }
-      };
-    };
 
-    $('disconnectBtn').onclick = () => {
-      if(ws) ws.close();
-      ws = null;
-      setStatus(false);
-    };
-
-    $('sendTextBtn').onclick = () => {
-      const text = $('sendTextInput').value.trim();
-      if(!text) return alert('Type your response first');
-      if(!ws || ws.readyState !== WebSocket.OPEN) return alert('Not connected');
-      
-      addTranscriptMessage('user', text);
-      ws.send(JSON.stringify({type: 'text', text}));
-      log(`Sent text: "${text}"`);
-      $('sendTextInput').value = '';
-    };
-
-    // STT Setup
-    let recognition = null;
-    try {
-      const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if(Rec) recognition = new Rec();
-    } catch(e){ /* no STT */ }
-
-    if(recognition){
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.lang = 'en-US';
-      
-      recognition.onstart = () => {
-        log('STT listening...');
-        $('startStt').disabled = true;
-        $('stopStt').disabled = false;
-      };
-      
-      recognition.onresult = (ev) => {
-        const text = Array.from(ev.results).map(r => r[0].transcript).join('\n');
-        $('sttResult').value = text;
-        log(`STT result: "${text}"`);
-      };
-      
-      recognition.onend = () => {
-        $('startStt').disabled = false;
-        $('stopStt').disabled = true;
-      };
-      
-      recognition.onerror = (e) => log(`STT error: ${e.error}`);
-    } else {
-      log('⚠ STT not supported in this browser (use Chrome)');
-      $('startStt').disabled = true;
-    }
-
-    $('startStt').onclick = () => { if(recognition) recognition.start(); };
-    $('stopStt').onclick = () => { if(recognition) recognition.stop(); };
-    $('sendStt').onclick = () => {
-      const text = $('sttResult').value.trim();
-      if(!text) return alert('No STT result');
-      if(!ws || ws.readyState !== WebSocket.OPEN) return alert('Not connected');
-      
-      addTranscriptMessage('user', text);
-      ws.send(JSON.stringify({type: 'text', text}));
-      log(`Sent STT: "${text}"`);
-      $('sttResult').value = '';
-    };
-
-    // Audio Recording
-    $('startRec').onclick = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({audio: true});
-        recordedChunks = [];
-        recordStartTime = Date.now();
-        mediaRecorder = new MediaRecorder(stream);
-        
-        recordInterval = setInterval(() => {
-          const elapsed = Math.floor((Date.now() - recordStartTime) / 1000);
-          $('recTime').textContent = `Recording... ${elapsed}s`;
-        }, 100);
-        
-        mediaRecorder.ondataavailable = e => {
-          if(e.data.size > 0) recordedChunks.push(e.data);
+        recordBtn.onclick = () => {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+                recordBtn.textContent = 'Start Recording';
+            } else {
+                navigator.mediaDevices.getUserMedia({ audio: true })
+                    .then(stream => {
+                        mediaRecorder = new MediaRecorder(stream);
+                        audioChunks = [];
+                        mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                        mediaRecorder.onstop = () => {
+                            const blob = new Blob(audioChunks, { type: 'audio/webm' });
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                                const base64 = reader.result.split(',')[1];
+                                ws.send(JSON.stringify({ type: 'candidate_audio', audio: base64 }));
+                                addMessage('[you] (audio sent)');
+                            };
+                            reader.readAsDataURL(blob);
+                        };
+                        mediaRecorder.start();
+                        recordBtn.textContent = 'Stop Recording';
+                    })
+                    .catch(err => addMessage('[error] mic access denied'));
+            }
         };
-        
-        mediaRecorder.onstop = async () => {
-          clearInterval(recordInterval);
-          $('recTime').textContent = '';
-          
-          const blob = new Blob(recordedChunks, {type: 'audio/webm'});
-          log(`Recording stopped, size: ${blob.size} bytes`);
-          
-          if(!ws || ws.readyState !== WebSocket.OPEN){
-            log('✗ WebSocket not connected. Cannot send audio.');
-            return;
-          }
-          
-          // Convert to base64
-          const b64 = await blobToBase64(blob);
-          const audioData = b64.split(',')[1];
-          
-          addTranscriptMessage('user', `[Audio message - ${blob.size} bytes]`);
-          ws.send(JSON.stringify({type: 'audio', audio: audioData}));
-          log(`Sent audio (${blob.size} bytes) to server`);
-        };
-        
-        mediaRecorder.start();
-        $('startRec').disabled = true;
-        $('stopRec').disabled = false;
-        log('Recording started...');
-      } catch(err){
-        log(`✗ getUserMedia error: ${err}`);
-        alert('Microphone access denied or not available');
-      }
-    };
-
-    $('stopRec').onclick = () => {
-      if(mediaRecorder && mediaRecorder.state !== 'inactive'){
-        mediaRecorder.stop();
-        mediaRecorder.stream.getTracks().forEach(t => t.stop());
-      }
-      $('startRec').disabled = false;
-      $('stopRec').disabled = true;
-    };
-
-    function blobToBase64(blob){
-      return new Promise((res, rej) => {
-        const r = new FileReader();
-        r.onloadend = () => res(r.result);
-        r.onerror = rej;
-        r.readAsDataURL(blob);
-      });
-    }
-
-    // Initialize
-    setStatus(false);
-    log('✓ Test page loaded');
-    log('ℹ Instructions:');
-    log('1. Click "Connect" to start interview');
-    log('2. Send text directly OR record audio OR use STT');
-    log('3. LLM will respond with text + audio');
-    log('');
-    log('Browser support: Chrome (recommended), Edge, Safari 15+');
-  </script>
+    </script>
 </body>
 </html>

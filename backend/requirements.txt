@@ -13,3 +13,4 @@ aiofiles
 websockets
 requests
 gtts
+python-dotenv
