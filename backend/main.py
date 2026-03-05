@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from authentication.database import init_db
 from authentication.routes import router as auth_router
 from resume_parsing.routes import router as resume_router
+from job_management_module.routes import router as jobs_router
 
 app = FastAPI(title="Project1 API")
 
@@ -21,3 +22,4 @@ def on_startup():
     
 app.include_router(auth_router)
 app.include_router(resume_router)
+app.include_router(jobs_router)
