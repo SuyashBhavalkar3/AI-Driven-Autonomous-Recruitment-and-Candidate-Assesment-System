@@ -2,6 +2,10 @@ from authentication.routes import router as auth_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from ai_interview_bot.router import router as ai_router
+from authentication.database import engine, Base
+from authentication.models import User
+
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 

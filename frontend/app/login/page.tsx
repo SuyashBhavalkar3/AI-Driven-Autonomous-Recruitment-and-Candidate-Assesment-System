@@ -9,6 +9,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Mail, Lock, ArrowRight, Loader2, AlertCircle } from "lucide-react";
 import { loginUser } from "@/lib/api";
+import { getCurrentUser } from "@/lib/api";
 import { setAuthToken, setUserRole, setUserData } from "@/lib/auth";
 
 export default function LoginPage() {
@@ -16,6 +17,7 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -31,14 +33,19 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      const authResponse = await loginUser({ email, password }); // no role sent
-      const { access_token, user } = authResponse; // assume backend returns user with role
+      const authResponse = await loginUser({ email, password });
+      const { access_token } = authResponse;
 
       setAuthToken(access_token);
-      setUserRole(user.role);
-      setUserData(user);
 
-      router.push(user.role === "hr" ? "/hr" : "/candidate");
+      // Fetch user data
+      const userData = await getCurrentUser(access_token);
+      const userRole = userData.is_employer ? "hr" : "candidate";
+      
+      setUserRole(userRole);
+      setUserData(userData);
+
+      router.push(userRole === "hr" ? "/hr" : "/candidate");
     } catch (err: any) {
       setError(err.message || "Login failed. Please check your credentials.");
       setIsLoading(false);

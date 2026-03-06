@@ -3,9 +3,6 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-<<<<<<< HEAD
-import { Briefcase, Users, PlusCircle, LogOut, Menu, X, Home, HelpCircle, Settings } from "lucide-react";
-=======
 import {
   Briefcase,
   Users,
@@ -18,7 +15,6 @@ import {
   Settings,
   Sparkles,
 } from "lucide-react";
->>>>>>> 843d47b8eb622fe5c116fb34bf1d6b17de7c4921
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
@@ -46,11 +42,7 @@ export default function HRLayout({ children }: { children: React.ReactNode }) {
           const user = await getCurrentUser(token);
           setUserData(user);
         } catch (error) {
-<<<<<<< HEAD
-          console.error('Failed to load user data:', error);
-=======
           console.error("Failed to load user data:", error);
->>>>>>> 843d47b8eb622fe5c116fb34bf1d6b17de7c4921
         }
       }
     };
@@ -132,12 +124,6 @@ export default function HRLayout({ children }: { children: React.ReactNode }) {
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
-<<<<<<< HEAD
-                <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{userData?.name || 'Loading...'}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{userData?.email || ''}</p>
-              </div>
-              <Button variant="ghost" size="icon" className="text-slate-500" onClick={logout}>
-=======
                 <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
                   {userData?.full_name || "Loading..."}
                 </p>
@@ -151,7 +137,6 @@ export default function HRLayout({ children }: { children: React.ReactNode }) {
                 className="text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 transition-colors"
                 onClick={logout}
               >
->>>>>>> 843d47b8eb622fe5c116fb34bf1d6b17de7c4921
                 <LogOut className="h-4 w-4" />
               </Button>
             </div>
