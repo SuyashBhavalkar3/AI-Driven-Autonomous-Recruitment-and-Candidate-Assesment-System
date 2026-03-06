@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
-import { Search, Users, Eye, Edit, Trash2, PlusCircle } from "lucide-react";
+import { Search, Users, Eye, Edit, Trash2, PlusCircle, Sparkles, MapPin, Briefcase, DollarSign } from "lucide-react";
 
 const jobs = [
   {
@@ -55,10 +55,11 @@ const jobs = [
   },
 ];
 
+// Status badge colors
 const statusColors = {
-  active: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-  closed: "bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300",
-};
+  active: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border-0",
+  closed: "bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-300 border-0",
+} as const;
 
 export default function JobsPage() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -68,81 +69,124 @@ export default function JobsPage() {
   );
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Job Listings</h1>
-          <p className="text-slate-600 dark:text-slate-400">Manage all your job postings</p>
-        </div>
-        <Link href="/hr/jobs/new">
-          <Button className="bg-blue-600 hover:bg-blue-700">
-            <PlusCircle className="h-4 w-4 mr-2" />
-            Post New Job
-          </Button>
-        </Link>
-      </div>
-
-      <Card className="mb-6 border-slate-200 dark:border-slate-800">
-        <CardContent className="p-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input
-              placeholder="Search jobs..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+              Job Listings
+              <Sparkles className="h-5 w-5 text-indigo-500" />
+            </h1>
+            <p className="text-slate-500 dark:text-slate-400 mt-1">
+              Manage all your job postings
+            </p>
           </div>
-        </CardContent>
-      </Card>
+          <Link href="/hr/jobs/new">
+            <Button className="bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-700 hover:to-indigo-600 text-white shadow-lg shadow-indigo-500/20 hover:shadow-xl transition-all duration-300">
+              <PlusCircle className="h-4 w-4 mr-2" />
+              Post New Job
+            </Button>
+          </Link>
+        </div>
 
-      <div className="space-y-4">
-        {filteredJobs.map((job) => (
-          <Card key={job.id} className="border-slate-200 dark:border-slate-800">
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{job.title}</h3>
-                    <Badge className={statusColors[job.status]}>{job.status}</Badge>
+        {/* Search Card */}
+        <Card className="mb-6 border-0 shadow-lg bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
+          <CardContent className="p-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                placeholder="Search jobs by title..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500/20"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Job Cards */}
+        <div className="space-y-4">
+          {filteredJobs.map((job) => (
+            <Card
+              key={job.id}
+              className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm"
+            >
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    {/* Title and Status */}
+                    <div className="flex items-center gap-3 mb-3">
+                      <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                        {job.title}
+                      </h3>
+                      <Badge className={statusColors[job.status]}>
+                        {job.status}
+                      </Badge>
+                    </div>
+
+                    {/* Job Details */}
+                    <div className="flex flex-wrap items-center gap-4 text-sm text-slate-600 dark:text-slate-400 mb-3">
+                      <span className="flex items-center gap-1">
+                        <Briefcase className="h-4 w-4 text-indigo-500" />
+                        {job.department}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <MapPin className="h-4 w-4 text-amber-500" />
+                        {job.location}
+                      </span>
+                      <span>{job.type}</span>
+                      <span className="flex items-center gap-1">
+                        <DollarSign className="h-4 w-4 text-emerald-500" />
+                        {job.salary}
+                      </span>
+                    </div>
+
+                    {/* Applicants and Posted Date */}
+                    <div className="flex items-center gap-2 text-sm">
+                      <Users className="h-4 w-4 text-indigo-500" />
+                      <span className="text-slate-600 dark:text-slate-400">
+                        {job.applicants} applicants
+                      </span>
+                      <span className="text-slate-400 dark:text-slate-600">•</span>
+                      <span className="text-slate-500 dark:text-slate-500">
+                        Posted {new Date(job.posted).toLocaleDateString()}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-4 text-sm text-slate-600 dark:text-slate-400">
-                    <span>{job.department}</span>
-                    <span>•</span>
-                    <span>{job.location}</span>
-                    <span>•</span>
-                    <span>{job.type}</span>
-                    <span>•</span>
-                    <span>{job.salary}</span>
-                  </div>
-                  <div className="flex items-center gap-2 mt-3">
-                    <Users className="h-4 w-4 text-slate-500" />
-                    <span className="text-sm text-slate-600 dark:text-slate-400">
-                      {job.applicants} applicants
-                    </span>
-                    <span className="text-sm text-slate-500">
-                      • Posted {new Date(job.posted).toLocaleDateString()}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Link href={`/hr/applicants?job=${job.id}`}>
-                    <Button variant="outline" size="sm">
-                      <Eye className="h-4 w-4 mr-2" />
-                      View Applicants
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-2">
+                    <Link href={`/hr/applicants?job=${job.id}`}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-slate-200 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
+                        View
+                      </Button>
+                    </Link>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-slate-200 dark:border-slate-700 hover:bg-amber-50 dark:hover:bg-amber-950/30 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
+                    >
+                      <Edit className="h-4 w-4" />
                     </Button>
-                  </Link>
-                  <Button variant="outline" size="sm">
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-slate-200 dark:border-slate-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
     </div>
   );
