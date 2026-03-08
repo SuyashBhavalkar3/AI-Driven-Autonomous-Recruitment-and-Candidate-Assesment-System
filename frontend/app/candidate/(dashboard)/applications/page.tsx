@@ -324,7 +324,7 @@ export default function ApplicationsPage() {
                               <p className="text-sm text-indigo-700 dark:text-indigo-400 mb-3">
                                 {new Date(app.interviewDate!).toLocaleString()}
                               </p>
-                              <Link href="/candidate/interview">
+                              <Link href={`/candidate/interview?applicationId=${app.id}&company=${encodeURIComponent(app.company)}&position=${encodeURIComponent(app.position)}`}>
                                 <Button
                                   size="sm"
                                   className="bg-indigo-600 hover:bg-indigo-700"

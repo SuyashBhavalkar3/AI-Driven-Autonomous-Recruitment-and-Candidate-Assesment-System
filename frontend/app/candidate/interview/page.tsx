@@ -1,354 +1,301 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import StartScreen from "@/components/interview/StartScreen";
 import DisqualificationScreen from "@/components/interview/DisqualificationScreen";
 import CompletionScreen from "@/components/interview/CompletionScreen";
 import InterviewHeader from "@/components/interview/InterviewHeader";
 import ProgressBar from "@/components/interview/ProgressBar";
 import CameraPanel from "@/components/interview/CameraPanel";
-import QuestionPanel from "@/components/interview/QuestionPanel";
 import { useFaceRecognition } from "@/hooks/useFaceRecognition";
 import { useVoiceMonitoring } from "@/hooks/useVoiceMonitoring";
 import { useProctoring } from "@/hooks/useProctoring";
 import { useCamera } from "@/hooks/useCamera";
 import { useTimer } from "@/hooks/useTimer";
-import { useWebSocketTTS } from "@/hooks/useWebSocketTTS";
-import type { Question } from "@/components/interview/StartScreen";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle } from "lucide-react";
 
-// Dummy questions for now (no API call)
-const DUMMY_QUESTIONS: Question[] = [
-  {
-    id: 1,
-    type: "oral",
-    question: "Describe your experience with modern frontend frameworks.",
-    duration: 120,
-  },
-  {
-    id: 2,
-    type: "coding",
-    question:
-      "Write a function to find the longest palindromic substring in a given string.",
-    duration: 900,
-    starterCode: `function longestPalindrome(s) {\n  // Your code here\n}\n\nconsole.log(longestPalindrome("babad"));`,
-  },
-  {
-    id: 3,
-    type: "oral",
-    question: "Explain the concept of closures in JavaScript with an example.",
-    duration: 180,
-  },
-  {
-    id: 4,
-    type: "coding",
-    question: "Implement a function that flattens a nested array.",
-    duration: 600,
-    starterCode: `function flattenArray(arr) {\n  // Your code here\n}\n\nconsole.log(flattenArray([1, [2, [3, 4], 5]]));`,
-  },
-];
+const BACKEND_WS = process.env.NEXT_PUBLIC_BACKEND_WS || "ws://localhost:8000";
+
+interface InterviewScript {
+  title: string;
+  totalDuration: number;
+  sections: Section[];
+}
+
+interface Section {
+  name: string;
+  duration: number;
+  type: string;
+  content?: string;
+  questions?: Question[];
+  challenges?: Challenge[];
+}
+
+interface Question {
+  id: number;
+  question: string;
+  timeLimit: number;
+  difficulty?: string;
+}
+
+interface Challenge {
+  id: number;
+  title: string;
+  description: string;
+  language: string;
+  timeLimit: number;
+  starterCode: string;
+}
+
 
 export default function InterviewPage() {
-  // Interview questions state – use dummy directly
-  const [questions, setQuestions] = useState<Question[]>(DUMMY_QUESTIONS);
-  const [isLoadingQuestions, setIsLoadingQuestions] = useState(false); // No loading
+  const searchParams = useSearchParams();
+  const applicationId = searchParams.get("applicationId");
+  const company = searchParams.get("company");
+  const position = searchParams.get("position");
 
   // Interview state
+  const [script, setScript] = useState<InterviewScript | null>(null);
+  const [currentSection, setCurrentSection] = useState(0);
+  const [currentQuestion, setCurrentQuestion] = useState<string>("");
   const [started, setStarted] = useState(false);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [answer, setAnswer] = useState("");
   const [completed, setCompleted] = useState(false);
   const [disqualified, setDisqualified] = useState(false);
   const [disqualificationReason, setDisqualificationReason] = useState("");
-
-  // Code compilation state
-  const [compileOutput, setCompileOutput] = useState<string>("");
+  const [sessionId, setSessionId] = useState<string>("");
+  const [isAISpeaking, setIsAISpeaking] = useState(false);
+  const [answer, setAnswer] = useState("");
   const [isCompiling, setIsCompiling] = useState(false);
+  const [compileOutput, setCompileOutput] = useState("");
 
-  // Camera & mic controls (auto-starts on mount)
-  const {
-    videoRef,
-    isCameraOn,
-    toggleCamera,
-    isMicOn,
-    toggleMic,
-    stream,
-    error: cameraError,
-    retry: retryCamera, // renamed for clarity
-  } = useCamera();
+  // WebSocket
+  const wsRef = useRef<WebSocket | null>(null);
 
-  // TTS via WebSocket
-  const {
-    speak,
-    cancel: cancelTTS,
-    isSpeaking: isAISpeaking,
-  } = useWebSocketTTS({ url: "ws://localhost:8000/tts" });
+  // Camera & mic
+  const { videoRef, isCameraOn, toggleCamera, isMicOn, toggleMic, stream, error: cameraError, retry: retryCamera } = useCamera();
 
-  // Proctoring (violations, visibility, network)
-  const { violations, addViolation, disqualify } = useProctoring({
-    maxViolations: 3,
-  });
+  // Proctoring
+  const { violations, addViolation, disqualify } = useProctoring({ maxViolations: 3 });
 
-  // Face recognition (proctoring)
-  const {
-    modelsLoaded,
-    referenceDescriptor,
-    captureReference,
-    startFaceCheck,
-    stopFaceCheck,
-    canvasRef,
-  } = useFaceRecognition({ videoRef: videoRef as React.RefObject<HTMLVideoElement> });
+  // Face recognition
+  const { modelsLoaded, referenceDescriptor, captureReference, startFaceCheck, stopFaceCheck, canvasRef } = useFaceRecognition({ videoRef: videoRef as React.RefObject<HTMLVideoElement> });
 
-  // Voice monitoring (proctoring)
-  const { isSpeaking, setupVoiceMonitoring, cleanupVoiceMonitoring } =
-    useVoiceMonitoring({
-      stream,
-      isMicOn,
-      questionType: questions[currentIndex]?.type,
-      onViolation: addViolation,
-    });
+  // Voice monitoring
+  const { isSpeaking, setupVoiceMonitoring, cleanupVoiceMonitoring } = useVoiceMonitoring({ stream, isMicOn, questionType: "oral", onViolation: addViolation });
 
-  // Create a ref to hold the resetTimer function (to break circular dependency)
-  const resetTimerRef = useRef<(newTime: number) => void | null>(null);
-
-  // Define handleNext BEFORE useTimer, using the ref to call resetTimer
-  const handleNext = useCallback(() => {
-    if (completed || disqualified) return;
-
-    if (currentIndex < questions.length - 1) {
-      const next = currentIndex + 1;
-      setCurrentIndex(next);
-      // Use the ref to call resetTimer with the new question's duration
-      if (resetTimerRef.current) {
-        resetTimerRef.current(questions[next].duration);
-      }
-    } else {
-      setCompleted(true);
-      cancelTTS();
-      stopFaceCheck();
-      cleanupVoiceMonitoring();
-    }
-  }, [
-    completed,
-    disqualified,
-    currentIndex,
-    questions,
-    cancelTTS,
-    stopFaceCheck,
-    cleanupVoiceMonitoring,
-  ]);
-
-  // Timer - now handleNext is defined, so we can pass it
-  const { timeLeft, resetTimer } = useTimer({
-    initialTime: questions[currentIndex]?.duration || 0,
+  // Timer
+  const { timeLeft } = useTimer({
+    initialTime: 45,
     active: started && !completed && !disqualified,
-    onExpire: handleNext,
+    onExpire: () => {
+      setCompleted(true);
+      if (wsRef.current) wsRef.current.close();
+    },
   });
 
-  // After useTimer, store resetTimer in the ref
-  useEffect(() => {
-    resetTimerRef.current = resetTimer;
-  }, [resetTimer]);
-
-  // Effect to handle disqualification when violations reach limit
-  useEffect(() => {
-    if (violations >= 3) {
-      setDisqualified(true);
-      setDisqualificationReason(`Exceeded maximum violations (3).`);
+  // Play audio
+  const playAudio = (audioBase64: string) => {
+    if (!audioBase64) return;
+    try {
+      const audio = new Audio(`data:audio/wav;base64,${audioBase64}`);
+      setIsAISpeaking(true);
+      audio.onended = () => setIsAISpeaking(false);
+      audio.play().catch(() => {});
+    } catch (error) {
+      console.error("Error playing audio:", error);
     }
-  }, [violations]);
+  };
 
-  // Cleanup when disqualified
+  // Connect to WebSocket
+  useEffect(() => {
+    if (!started || !sessionId) return;
+
+    try {
+      const wsUrl = `${BACKEND_WS}/ws/interview/${sessionId}?position=${encodeURIComponent(position || "Engineer")}&company=${encodeURIComponent(company || "Tech")}`;
+      wsRef.current = new WebSocket(wsUrl);
+
+      wsRef.current.onopen = () => console.log("Connected");
+
+      wsRef.current.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        console.log("Backend:", msg.type);
+
+        if (msg.type === "interview_started") {
+          setScript(msg.script);
+        } else if (msg.type === "section_started" || msg.type === "follow_up_question") {
+          setCurrentQuestion(msg.text);
+          playAudio(msg.audio);
+        } else if (msg.type === "behavioral_question") {
+          setCurrentQuestion(msg.question);
+          playAudio(msg.audio);
+        } else if (msg.type === "coding_challenge") {
+          setAnswer(msg.starterCode || "");
+        } else if (msg.type === "code_evaluation") {
+          const evaluation = msg.evaluation;
+          setCompileOutput(`Score: ${evaluation.score}/100\nFeedback: ${evaluation.feedback}`);
+        } else if (msg.type === "execution_result") {
+          setCompileOutput(msg.output || msg.error || "");
+          setIsCompiling(false);
+        } else if (msg.type === "interview_complete") {
+          setCompleted(true);
+        } else if (msg.type === "interview_closing") {
+          playAudio(msg.audio);
+          setTimeout(() => setCompleted(true), 3000);
+        } else if (msg.type === "error") {
+          disqualify(msg.message);
+        }
+      };
+
+      wsRef.current.onerror = () => console.log("Connection error");
+      wsRef.current.onclose = () => console.log("Disconnected");
+
+      return () => {
+        if (wsRef.current) wsRef.current.close();
+      };
+    } catch (error) {
+      console.log("Connection failed", error);
+    }
+  }, [started, sessionId, position, company, disqualify]);
+
+  // Create session
+  useEffect(() => {
+    if (!sessionId && applicationId) {
+      setSessionId(`app_${applicationId}_${Date.now()}`);
+    }
+  }, [sessionId, applicationId]);
+
+  // Violations (DISABLED FOR TESTING)
+  // useEffect(() => {
+  //   if (violations >= 3) {
+  //     setDisqualified(true);
+  //     setDisqualificationReason("Exceeded maximum violations");
+  //   }
+  // }, [violations]);
+
+  // Cleanup
   useEffect(() => {
     if (disqualified) {
       stopFaceCheck();
       cleanupVoiceMonitoring();
-      cancelTTS();
+      if (wsRef.current) wsRef.current.close();
     }
-  }, [disqualified, stopFaceCheck, cleanupVoiceMonitoring, cancelTTS]);
+  }, [disqualified, stopFaceCheck, cleanupVoiceMonitoring]);
 
-  // Handle camera error
-  useEffect(() => {
-    if (cameraError) {
-      disqualify(cameraError);
-    }
-  }, [cameraError, disqualify]);
+  // Camera error (DISABLED FOR TESTING)
+  // useEffect(() => {
+  //   if (cameraError) disqualify(cameraError);
+  // }, [cameraError, disqualify]);
 
-  // Auto-start first question when interview starts
-  useEffect(() => {
-    if (
-      started &&
-      questions.length > 0 &&
-      !referenceDescriptor &&
-      !disqualified &&
-      !completed
-    ) {
-      const timeout = setTimeout(async () => {
-        const success = await captureReference();
-        if (success) {
-          resetTimer(questions[0].duration);
-          speak(questions[0].question);
-        } else {
-          disqualify("Could not capture reference face");
-        }
-      }, 2000);
-      return () => clearTimeout(timeout);
-    }
-  }, [
-    started,
-    questions,
-    referenceDescriptor,
-    disqualified,
-    completed,
-    captureReference,
-    resetTimer,
-    speak,
-    disqualify,
-  ]);
+  // Face checks (DISABLED FOR TESTING)
+  // useEffect(() => {
+  //   if (started && referenceDescriptor && !completed && !disqualified) {
+  //     startFaceCheck((reason) => addViolation(reason));
+  //   } else {
+  //     stopFaceCheck();
+  //   }
+  // }, [started, referenceDescriptor, completed, disqualified, addViolation, startFaceCheck, stopFaceCheck]);
 
-  // Speak question when it changes (for subsequent questions)
-  useEffect(() => {
-    if (
-      started &&
-      questions.length > 0 &&
-      referenceDescriptor &&
-      !disqualified &&
-      !completed &&
-      currentIndex > 0
-    ) {
-      speak(questions[currentIndex].question);
-    }
-  }, [
-    currentIndex,
-    started,
-    questions,
-    referenceDescriptor,
-    disqualified,
-    completed,
-    speak,
-  ]);
+  // Voice monitoring (DISABLED FOR TESTING)
+  // useEffect(() => {
+  //   if (started && isMicOn && !completed && !disqualified) {
+  //     setupVoiceMonitoring();
+  //   } else {
+  //     cleanupVoiceMonitoring();
+  //   }
+  // }, [started, isMicOn, completed, disqualified, setupVoiceMonitoring, cleanupVoiceMonitoring]);
 
-  // Start face checks after reference captured
-  useEffect(() => {
-    if (started && referenceDescriptor && !completed && !disqualified) {
-      startFaceCheck((reason) => addViolation(reason));
-    } else {
-      stopFaceCheck();
-    }
-    return stopFaceCheck;
-  }, [
-    started,
-    referenceDescriptor,
-    completed,
-    disqualified,
-    addViolation,
-    startFaceCheck,
-    stopFaceCheck,
-  ]);
-
-  // Start voice monitoring
-  useEffect(() => {
-    if (started && isMicOn && !completed && !disqualified) {
-      setupVoiceMonitoring();
-    } else {
-      cleanupVoiceMonitoring();
-    }
-    return cleanupVoiceMonitoring;
-  }, [
-    started,
-    isMicOn,
-    currentIndex,
-    completed,
-    disqualified,
-    setupVoiceMonitoring,
-    cleanupVoiceMonitoring,
-  ]);
-
-  // Reset answer on question change
-  useEffect(() => {
-    setAnswer("");
-    setCompileOutput("");
-  }, [currentIndex]);
-
-  // Handle start interview
-  const handleStart = () => {
+  // Handlers
+  const handleStart = async () => {
+    // DISABLED FOR TESTING - skip face capture
     setStarted(true);
+    // const success = await captureReference();
+    // if (success) {
+    //   setStarted(true);
+    // } else {
+    //   disqualify("Could not capture reference face");
+    // }
   };
 
-  // Handle code compilation
-  const handleRunCode = useCallback(async () => {
-    setIsCompiling(true);
-    setCompileOutput("");
-    try {
-      const response = await fetch("/api/compile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: answer, language: "javascript" }),
-      });
-      const data = await response.json();
-      setCompileOutput(data.output || data.error || "No output");
-    } catch (error) {
-      setCompileOutput("Compilation request failed");
-    } finally {
-      setIsCompiling(false);
+  const sendResponse = () => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "candidate_response", text: answer }));
+      setAnswer("");
     }
-  }, [answer]);
+  };
 
-  // Disqualification screen
-  if (disqualified) {
-    return <DisqualificationScreen reason={disqualificationReason} />;
-  }
+  const handleNextSection = () => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "move_to_next_section" }));
+    }
+  };
 
-  // Start screen
+  const handleRunCode = () => {
+    setIsCompiling(true);
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "run_code", code: answer, language: "javascript" }));
+    }
+  };
+
+  const handleSubmitCode = () => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "code_submission", code: answer, language: "javascript" }));
+    }
+  };
+
+  // Screens
+  if (disqualified) return <DisqualificationScreen reason={disqualificationReason} />;
+  if (completed) return <CompletionScreen />;
+
   if (!started) {
     return (
       <StartScreen
-        questions={questions}
+        questions={script?.sections || [{ name: "Loading...", type: "intro", duration: 45 } as any]}
         onStart={handleStart}
-        modelsLoaded={modelsLoaded}
+        modelsLoaded={true}
       />
     );
   }
 
-  // Completion screen
-  if (completed) {
-    return <CompletionScreen />;
-  }
-
-  const currentQuestion = questions[currentIndex];
-  if (!currentQuestion) {
+  if (!script) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4" />
-          <p className="text-slate-600 dark:text-slate-400">
-            Loading interview questions...
-          </p>
+          <p className="text-slate-600">Generating interview script...</p>
         </div>
       </div>
     );
   }
 
-  // Main interview UI
+  const section = script.sections[currentSection];
+  if (!section) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4" />
+          <p className="text-slate-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <canvas ref={canvasRef} width="640" height="480" className="hidden" />
       <div className="max-w-7xl mx-auto px-4 py-8">
         <InterviewHeader
-          currentIndex={currentIndex}
-          totalQuestions={questions.length}
+          currentIndex={currentSection}
+          totalQuestions={script.sections.length}
           timeLeft={timeLeft}
           violations={violations}
           isSpeaking={isSpeaking}
-          isAISpeaking={true}
+          isAISpeaking={isAISpeaking}
         />
-        <ProgressBar
-          currentIndex={currentIndex}
-          totalQuestions={questions.length}
-        />
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <ProgressBar currentIndex={currentSection} totalQuestions={script.sections.length} />
+
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mt-8">
           <CameraPanel
             videoRef={videoRef as React.RefObject<HTMLVideoElement>}
             stream={stream}
@@ -359,17 +306,66 @@ export default function InterviewPage() {
             error={cameraError}
             onRetry={retryCamera}
           />
-          <QuestionPanel
-            question={currentQuestion}
-            answer={answer}
-            setAnswer={setAnswer}
-            onNext={handleNext}
-            isLast={currentIndex === questions.length - 1}
-            isSpeaking={isSpeaking}
-            onRunCode={handleRunCode}
-            isCompiling={isCompiling}
-            compileOutput={compileOutput}
-          />
+
+          <div className="lg:col-span-3">
+            <Card>
+              <CardContent className="p-8">
+                <h2 className="text-2xl font-bold mb-4">{section.name}</h2>
+                <p className="text-sm text-gray-600 mb-6">Duration: {section.duration} min</p>
+
+                {section.type === "intro" && (
+                  <div className="space-y-4">
+                    <p className="text-lg">{currentQuestion}</p>
+                    <Button onClick={handleNextSection} className="w-full">Start Assessment</Button>
+                  </div>
+                )}
+
+                {section.type === "technical" && (
+                  <div className="space-y-4">
+                    <p className="text-lg font-semibold">{currentQuestion}</p>
+                    <textarea value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder="Your answer..." className="w-full h-32 p-4 border rounded-lg" />
+                    <div className="flex gap-2">
+                      <Button onClick={sendResponse} className="flex-1">Submit</Button>
+                      <Button onClick={handleNextSection} variant="outline" className="flex-1">Next</Button>
+                    </div>
+                  </div>
+                )}
+
+                {section.type === "coding" && (
+                  <div className="space-y-4">
+                    <div className="bg-gray-100 p-4 rounded-lg mb-4">
+                      <h3 className="font-bold mb-2">Problem:</h3>
+                      <p>{section.challenges?.[0]?.description}</p>
+                    </div>
+                    <textarea value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder="Code here..." className="w-full h-40 p-4 border rounded-lg font-mono text-sm" />
+                    <div className="flex gap-2">
+                      <Button onClick={handleRunCode} className="flex-1">Run</Button>
+                      <Button onClick={handleSubmitCode} className="flex-1 bg-green-600">Submit</Button>
+                    </div>
+                    {compileOutput && <div className="bg-gray-100 p-4 rounded-lg"><pre className="text-sm">{compileOutput}</pre></div>}
+                  </div>
+                )}
+
+                {section.type === "behavioral" && (
+                  <div className="space-y-4">
+                    <p className="text-lg font-semibold">{currentQuestion}</p>
+                    <textarea value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder="Tell us..." className="w-full h-32 p-4 border rounded-lg" />
+                    <div className="flex gap-2">
+                      <Button onClick={sendResponse} className="flex-1">Submit</Button>
+                      <Button onClick={handleNextSection} variant="outline" className="flex-1">Next</Button>
+                    </div>
+                  </div>
+                )}
+
+                {section.type === "closing" && (
+                  <div className="space-y-4">
+                    <p className="text-lg">{currentQuestion}</p>
+                    <Button onClick={() => setCompleted(true)} className="w-full">Complete</Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     </div>
