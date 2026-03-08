@@ -17,6 +17,15 @@ router = APIRouter()
 session_manager = SessionManager()
 logger = logging.getLogger(__name__)
 
+async def safe_send_json(websocket: WebSocket, data: dict):
+    """Safely send JSON data through WebSocket with error handling"""
+    try:
+        await websocket.send_json(data)
+        return True
+    except Exception as e:
+        logger.error(f"Error sending JSON to websocket: {str(e)}")
+        return False
+
 @router.get("/interview/script/{session_id}")
 async def get_interview_script(session_id: str):
     """Get the generated interview script for a session."""
@@ -52,7 +61,7 @@ async def interview_websocket(websocket: WebSocket, session_id: str, position: s
             logger.info(f"Interview script generated with {len(interview_script.get('sections', []))} sections")
             
             # Send script overview to client
-            await websocket.send_json({
+            await safe_send_json(websocket, {
                 "type": "interview_started",
                 "script": interview_script,
                 "totalDuration": interview_script.get("totalDuration", 45),
@@ -61,7 +70,7 @@ async def interview_websocket(websocket: WebSocket, session_id: str, position: s
             
         except Exception as e:
             logger.error(f"Error generating interview script: {str(e)}", exc_info=True)
-            await websocket.send_json({
+            await safe_send_json(websocket, {
                 "type": "error",
                 "message": f"Failed to generate interview script: {str(e)}"
             })
@@ -81,13 +90,16 @@ async def interview_websocket(websocket: WebSocket, session_id: str, position: s
                     session["current_section"] = 0
                     session["current_question"] = 0
                     
-                    await websocket.send_json({
-                        "type": "section_started",
-                        "section": intro_section.get("name", "Introduction"),
-                        "text": intro_text,
-                        "audio": intro_audio,
-                        "duration": intro_section.get("duration", 2)
-                    })
+                    try:
+                        await safe_send_json(websocket, {
+                            "type": "section_started",
+                            "section": intro_section.get("name", "Introduction"),
+                            "text": intro_text,
+                            "audio": intro_audio,
+                            "duration": intro_section.get("duration", 2)
+                        })
+                    except Exception as send_error:
+                        logger.error(f"Error sending introduction: {str(send_error)}")
                     
                     session_manager.add_transcript(session_id, "bot", intro_text)
                     logger.info("Introduction sent to candidate")
@@ -97,156 +109,178 @@ async def interview_websocket(websocket: WebSocket, session_id: str, position: s
 
         try:
             while True:
-                data = await websocket.receive_text()
-                message = json.loads(data)
-                msg_type = message.get("type")
-                logger.info(f"Received message type: {msg_type}")
+                try:
+                    data = await websocket.receive_text()
+                    message = json.loads(data)
+                    msg_type = message.get("type")
+                    logger.info(f"Received message type: {msg_type}")
 
-                if msg_type == "candidate_response":
-                    response_text = message.get("text", "")
-                    session_manager.add_transcript(session_id, "candidate", response_text)
-                    
-                    # Generate follow-up question
-                    current_section = session.get("current_section", 0)
-                    sections = interview_script.get("sections", [])
-                    
-                    if current_section < len(sections):
-                        section = sections[current_section]
-                        follow_up = generate_follow_up_question(session, section.get("type", "technical"))
-                        follow_up_audio = generate_speech(follow_up)
+                    if msg_type == "candidate_response":
+                        response_text = message.get("text", "")
+                        session_manager.add_transcript(session_id, "candidate", response_text)
                         
-                        session_manager.add_transcript(session_id, "bot", follow_up)
+                        # Generate follow-up question
+                        current_section = session.get("current_section", 0)
+                        sections = interview_script.get("sections", [])
                         
-                        await websocket.send_json({
-                            "type": "follow_up_question",
-                            "text": follow_up,
-                            "audio": follow_up_audio
-                        })
-                        logger.info("Follow-up question sent")
+                        if current_section < len(sections):
+                            section = sections[current_section]
+                            follow_up = generate_follow_up_question(session, section.get("type", "technical"))
+                            follow_up_audio = generate_speech(follow_up)
+                            
+                            session_manager.add_transcript(session_id, "bot", follow_up)
+                            
+                            await safe_send_json(websocket, {
+                                "type": "follow_up_question",
+                                "text": follow_up,
+                                "audio": follow_up_audio
+                            })
+                            logger.info("Follow-up question sent")
 
-                elif msg_type == "move_to_next_section":
-                    current = session.get("current_section", 0)
-                    sections = interview_script.get("sections", [])
-                    next_section_idx = current + 1
-                    
-                    if next_section_idx < len(sections):
-                        session["current_section"] = next_section_idx
-                        section = sections[next_section_idx]
+                    elif msg_type == "move_to_next_section":
+                        current = session.get("current_section", 0)
+                        sections = interview_script.get("sections", [])
+                        next_section_idx = current + 1
                         
-                        if section.get("type") == "coding":
-                            # Send coding challenge
+                        if next_section_idx < len(sections):
+                            session["current_section"] = next_section_idx
+                            section = sections[next_section_idx]
+                            
+                            if section.get("type") == "coding":
+                                # Send coding challenge
+                                challenges = section.get("challenges", [])
+                                if challenges:
+                                    challenge = challenges[0]
+                                    challenge_text = f"{challenge.get('title')}\n\n{challenge.get('description')}"
+                                    
+                                    await safe_send_json(websocket, {
+                                        "type": "coding_challenge",
+                                        "challenge": challenge,
+                                        "starterCode": challenge.get("starterCode", ""),
+                                        "timeLimit": challenge.get("timeLimit", 12)
+                                    })
+                                    logger.info("Coding challenge sent")
+                            
+                            elif section.get("type") == "behavioral":
+                                questions = section.get("questions", [])
+                                if questions:
+                                    question = questions[0]
+                                    q_text = question.get("question", "")
+                                    q_audio = generate_speech(q_text)
+                                    
+                                    await safe_send_json(websocket, {
+                                        "type": "behavioral_question",
+                                        "question": q_text,
+                                        "audio": q_audio,
+                                        "timeLimit": question.get("timeLimit", 2)
+                                    })
+                                    logger.info("Behavioral question sent")
+                            
+                            elif section.get("type") == "closing":
+                                closing_text = section.get("content", "Thank you for the interview!")
+                                closing_audio = generate_speech(closing_text)
+                                
+                                await safe_send_json(websocket, {
+                                    "type": "interview_closing",
+                                    "text": closing_text,
+                                    "audio": closing_audio
+                                })
+                                logger.info("Interview closing sent")
+                        else:
+                            # Interview complete
+                            await safe_send_json(websocket, {
+                                "type": "interview_complete",
+                                "message": "Interview completed! Your responses will be reviewed by our AI system."
+                            })
+                            session_manager.end_session(session_id)
+                            try:
+                                await websocket.close()
+                            except:
+                                pass
+                            break
+
+                    elif msg_type == "code_submission":
+                        code = message.get("code", "")
+                        language = message.get("language", "javascript")
+                        
+                        # Execute code
+                        result = execute_code(code, language, "4")
+                        
+                        # Evaluate solution
+                        sections = interview_script.get("sections", [])
+                        current_section = session.get("current_section", 0)
+                        
+                        problem_desc = ""
+                        if current_section < len(sections):
+                            section = sections[current_section]
                             challenges = section.get("challenges", [])
                             if challenges:
-                                challenge = challenges[0]
-                                challenge_text = f"{challenge.get('title')}\n\n{challenge.get('description')}"
-                                
-                                await websocket.send_json({
-                                    "type": "coding_challenge",
-                                    "challenge": challenge,
-                                    "starterCode": challenge.get("starterCode", ""),
-                                    "timeLimit": challenge.get("timeLimit", 12)
-                                })
-                                logger.info("Coding challenge sent")
+                                problem_desc = challenges[0].get("description", "")
                         
-                        elif section.get("type") == "behavioral":
-                            questions = section.get("questions", [])
-                            if questions:
-                                question = questions[0]
-                                q_text = question.get("question", "")
-                                q_audio = generate_speech(q_text)
-                                
-                                await websocket.send_json({
-                                    "type": "behavioral_question",
-                                    "question": q_text,
-                                    "audio": q_audio,
-                                    "timeLimit": question.get("timeLimit", 2)
-                                })
-                                logger.info("Behavioral question sent")
+                        evaluation = evaluate_solution(code, language, problem_desc)
                         
-                        elif section.get("type") == "closing":
-                            closing_text = section.get("content", "Thank you for the interview!")
-                            closing_audio = generate_speech(closing_text)
-                            
-                            await websocket.send_json({
-                                "type": "interview_closing",
-                                "text": closing_text,
-                                "audio": closing_audio
+                        await safe_send_json(websocket, {
+                            "type": "code_evaluation",
+                            "execution": result,
+                            "evaluation": evaluation
+                        })
+                        logger.info(f"Code evaluated - Score: {evaluation.get('score', 0)}")
+
+                    elif msg_type == "run_code":
+                        code = message.get("code", "")
+                        language = message.get("language", "javascript")
+                        result = execute_code(code, language, "4")
+                        
+                        if "error" in result:
+                            await safe_send_json(websocket, {
+                                "type": "execution_result",
+                                "error": result["error"]
                             })
-                            logger.info("Interview closing sent")
+                        else:
+                            await safe_send_json(websocket, {
+                                "type": "execution_result",
+                                "output": result.get("output", ""),
+                                "memory": result.get("memory", 0),
+                                "cpuTime": result.get("cpuTime", 0)
+                            })
+
+                    elif msg_type == "proctor_event":
+                        log_violation(session_id, message.get("event"), session_manager)
+
                     else:
-                        # Interview complete
-                        await websocket.send_json({
-                            "type": "interview_complete",
-                            "message": "Interview completed! Your responses will be reviewed by our AI system."
-                        })
-                        session_manager.end_session(session_id)
-                        await websocket.close()
+                        await safe_send_json(websocket, {"type": "error", "message": "unsupported message type"})
 
-                elif msg_type == "code_submission":
-                    code = message.get("code", "")
-                    language = message.get("language", "javascript")
-                    
-                    # Execute code
-                    result = execute_code(code, language, "4")
-                    
-                    # Evaluate solution
-                    sections = interview_script.get("sections", [])
-                    current_section = session.get("current_section", 0)
-                    
-                    problem_desc = ""
-                    if current_section < len(sections):
-                        section = sections[current_section]
-                        challenges = section.get("challenges", [])
-                        if challenges:
-                            problem_desc = challenges[0].get("description", "")
-                    
-                    evaluation = evaluate_solution(code, language, problem_desc)
-                    
-                    await websocket.send_json({
-                        "type": "code_evaluation",
-                        "execution": result,
-                        "evaluation": evaluation
-                    })
-                    logger.info(f"Code evaluated - Score: {evaluation.get('score', 0)}")
+                except WebSocketDisconnect:
+                    logger.info(f"WebSocket disconnected during message loop: {session_id}")
+                    break
+                except json.JSONDecodeError:
+                    logger.error("Invalid JSON received from client")
+                    await safe_send_json(websocket, {"type": "error", "message": "Invalid JSON format"})
+                except Exception as msg_error:
+                    logger.error(f"Error processing message: {str(msg_error)}", exc_info=True)
+                    await safe_send_json(websocket, {"type": "error", "message": f"Processing error: {str(msg_error)}"})
 
-                elif msg_type == "run_code":
-                    code = message.get("code", "")
-                    language = message.get("language", "javascript")
-                    result = execute_code(code, language, "4")
-                    
-                    if "error" in result:
-                        await websocket.send_json({
-                            "type": "execution_result",
-                            "error": result["error"]
-                        })
-                    else:
-                        await websocket.send_json({
-                            "type": "execution_result",
-                            "output": result.get("output", ""),
-                            "memory": result.get("memory", 0),
-                            "cpuTime": result.get("cpuTime", 0)
-                        })
-
-                elif msg_type == "proctor_event":
-                    log_violation(session_id, message.get("event"), session_manager)
-
-                else:
-                    await websocket.send_json({"type": "error", "message": "unsupported message type"})
 
         except WebSocketDisconnect:
             logger.info(f"WebSocket disconnected: {session_id}")
             session_manager.end_session(session_id)
         except Exception as e:
             logger.error(f"Error in websocket loop: {str(e)}", exc_info=True)
+            # Only try to send error if connection is still open
             try:
-                await websocket.send_json({"type": "error", "message": str(e)})
-            except:
-                pass
-            session_manager.end_session(session_id)
+                await safe_send_json(websocket, {"type": "error", "message": str(e)})
+                await websocket.close()
+            except Exception as close_error:
+                logger.error(f"Error closing websocket: {str(close_error)}")
+            finally:
+                session_manager.end_session(session_id)
     
     except Exception as e:
         logger.error(f"Unexpected error in websocket handler: {str(e)}", exc_info=True)
+        # Try to close connection gracefully
         try:
-            await websocket.send_json({"type": "error", "message": str(e)})
-        except:
-            pass
+            await websocket.close()
+        except Exception as close_error:
+            logger.error(f"Error closing websocket in outer handler: {str(close_error)}")
+        finally:
+            session_manager.end_session(session_id)
