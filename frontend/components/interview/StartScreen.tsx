@@ -1,29 +1,27 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Camera, AlertTriangle } from "lucide-react";
-export interface Question {
-  id: number;
-  type: "oral" | "coding";
-  question: string;
+export interface Section {
+  name: string;
+  type: string;
   duration: number;
-  starterCode?: string;
+  content?: string;
 }
 
 interface StartScreenProps {
-  questions: Question[];
+  questions: Section[];
   onStart: () => void;
   modelsLoaded: boolean;
 }
 
 export default function StartScreen({ questions, onStart, modelsLoaded }: StartScreenProps) {
-  const oralCount = questions.filter((q) => q.type === "oral").length;
-  const codingCount = questions.filter((q) => q.type === "coding").length;
+  const totalQuestions = questions.length;
 
   return (
     <div className="min-h-screen flex items-center justify-center">
       <Card className="max-w-2xl w-full border-slate-200 dark:border-slate-800">
         <CardHeader>
-          <CardTitle className="text-2xl">AI Interview - {questions[0]?.question.slice(0, 30)}...</CardTitle>
+          <CardTitle className="text-2xl">AI Interview - {questions[0]?.name ? questions[0].name.slice(0, 30) : "Interview"}</CardTitle>
           <p className="text-slate-600 dark:text-slate-400">Based on your job description</p>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -43,12 +41,12 @@ export default function StartScreen({ questions, onStart, modelsLoaded }: StartS
 
           <div className="grid grid-cols-2 gap-4">
             <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-              <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Oral Questions</p>
-              <p className="text-2xl font-bold text-blue-600">{oralCount}</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Total Sections</p>
+              <p className="text-2xl font-bold text-blue-600">{totalQuestions}</p>
             </div>
             <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-              <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Coding Questions</p>
-              <p className="text-2xl font-bold text-purple-600">{codingCount}</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Est. Duration</p>
+              <p className="text-2xl font-bold text-purple-600">{questions.reduce((sum, q) => sum + (q.duration || 0), 0)} min</p>
             </div>
           </div>
 

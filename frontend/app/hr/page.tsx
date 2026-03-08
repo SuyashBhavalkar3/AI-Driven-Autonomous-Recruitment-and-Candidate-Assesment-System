@@ -5,9 +5,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
-<<<<<<< HEAD
-import { Briefcase, Users, CheckCircle, Clock, TrendingUp, PlusCircle, BarChart3 } from "lucide-react";
-=======
 import {
   Briefcase,
   Users,
@@ -22,8 +19,6 @@ import {
   Award,
   Loader2,
 } from "lucide-react";
-import gsap from "gsap";
->>>>>>> 843d47b8eb622fe5c116fb34bf1d6b17de7c4921
 
 // --- Data (ensure it's populated) ---
 const stats = [
@@ -130,20 +125,6 @@ const monthlyHiring = [
   { month: "Jun", hired: 7 },
 ];
 
-const hiringFunnel = [
-  { stage: "Applied", count: 156, color: "bg-blue-500" },
-  { stage: "Screened", count: 98, color: "bg-purple-500" },
-  { stage: "Assessment", count: 54, color: "bg-indigo-500" },
-  { stage: "Interview", count: 28, color: "bg-violet-500" },
-  { stage: "Offer", count: 12, color: "bg-green-500" },
-];
-
-const monthlyHiring = [
-  { month: "Jan", hired: 3 },
-  { month: "Feb", hired: 5 },
-  { month: "Mar", hired: 4 },
-];
-
 const statusColors = {
   active:
     "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border-0",
@@ -156,118 +137,32 @@ const statusColors = {
 };
 
 export default function HRDashboard() {
-<<<<<<< HEAD
-  const maxHired = Math.max(...monthlyHiring.map(d => d.hired));
-  const maxFunnel = Math.max(...hiringFunnel.map(d => d.count));
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Dashboard</h1>
-          <p className="text-slate-600 dark:text-slate-400">Manage your recruitment pipeline</p>
-        </div>
-        <Link href="/hr/jobs/new">
-          <Button className="bg-blue-600 hover:bg-blue-700">
-            <PlusCircle className="h-4 w-4 mr-2" />
-            Post New Job
-          </Button>
-        </Link>
-      </div>
-=======
+  // Refs
   const containerRef = useRef<HTMLDivElement>(null);
   const statsRef = useRef<HTMLDivElement>(null);
   const funnelRef = useRef<HTMLDivElement>(null);
   const trendRef = useRef<HTMLDivElement>(null);
   const jobsRef = useRef<HTMLDivElement>(null);
   const applicantsRef = useRef<HTMLDivElement>(null);
->>>>>>> 843d47b8eb622fe5c116fb34bf1d6b17de7c4921
 
-  // Track loading state for animations (optional)
+  // Track loading state for animations
   const [animationsReady, setAnimationsReady] = useState(false);
 
-  useEffect(() => {
-    const ctx = gsap.context(() => {
-      // Fade in the whole container
-      gsap.fromTo(
-        containerRef.current,
-        { opacity: 0 },
-        { opacity: 1, duration: 0.5, ease: "power2.out" }
-      );
-
-      // Stats cards
-      if (statsRef.current) {
-        gsap.fromTo(
-          statsRef.current.children,
-          { y: 30, opacity: 0 },
-          { y: 0, opacity: 1, duration: 0.8, stagger: 0.1, ease: "back.out(1.2)" }
-        );
-      }
-
-      // Funnel bars
-      if (funnelRef.current) {
-        const maxFunnel = Math.max(...hiringFunnel.map((d) => d.count));
-        const bars = funnelRef.current.querySelectorAll(".funnel-bar");
-        bars.forEach((bar, index) => {
-          const count = hiringFunnel[index].count;
-          const widthPercent = (count / maxFunnel) * 100;
-          gsap.set(bar, { width: 0 });
-          gsap.to(bar, {
-            width: `${widthPercent}%`,
-            duration: 1.2,
-            delay: 0.4 + index * 0.1,
-            ease: "power3.out",
-          });
-        });
-      }
-
-      // Trend bars
-      if (trendRef.current) {
-        const maxHired = Math.max(...monthlyHiring.map((d) => d.hired));
-        const bars = trendRef.current.querySelectorAll(".trend-bar");
-        bars.forEach((bar, index) => {
-          const hired = monthlyHiring[index].hired;
-          const heightPercent = (hired / maxHired) * 100;
-          gsap.set(bar, { height: 0 });
-          gsap.to(bar, {
-            height: `${heightPercent}%`,
-            duration: 1.2,
-            delay: 0.6 + index * 0.1,
-            ease: "power3.out",
-          });
-        });
-      }
-
-      // Recent jobs – ensure they start visible and then animate
-      if (jobsRef.current) {
-        gsap.fromTo(
-          jobsRef.current.children,
-          { y: 20, opacity: 0 },
-          { y: 0, opacity: 1, duration: 0.7, stagger: 0.1, delay: 1, ease: "power2.out" }
-        );
-      }
-
-      // Applicants
-      if (applicantsRef.current) {
-        gsap.fromTo(
-          applicantsRef.current.children,
-          { y: 20, opacity: 0 },
-          { y: 0, opacity: 1, duration: 0.7, stagger: 0.1, delay: 1.2, ease: "power2.out" }
-        );
-      }
-
-      setAnimationsReady(true);
-    }, containerRef);
-
-    return () => ctx.revert();
-  }, []);
-
+  // Calculate max values
   const maxFunnel = Math.max(...hiringFunnel.map((d) => d.count));
   const maxHired = Math.max(...monthlyHiring.map((d) => d.hired));
 
   // If data is missing, show placeholders
   const hasJobs = recentJobs.length > 0;
   const hasApplicants = recentApplicants.length > 0;
+
+  useEffect(() => {
+    // Simple fade-in effect without GSAP
+    if (containerRef.current) {
+      containerRef.current.style.opacity = "1";
+    }
+    setAnimationsReady(true);
+  }, []);
 
   return (
     <div
@@ -345,7 +240,7 @@ export default function HRDashboard() {
                 <span className="text-xs text-slate-400">Real-time</span>
               </div>
               <div className="space-y-4">
-                {hiringFunnel.map((stage, index) => (
+                {hiringFunnel.map((stage) => (
                   <div key={stage.stage} className="relative group">
                     <div className="flex items-center justify-between mb-1 text-sm">
                       <span className="text-slate-600 dark:text-slate-300">
@@ -361,7 +256,6 @@ export default function HRDashboard() {
                         style={{ width: 0 }}
                       />
                     </div>
-                    {/* Simple tooltip */}
                     <div className="absolute right-0 -top-8 bg-slate-800 text-white text-xs py-1 px-2 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                       {stage.count} candidates
                     </div>
@@ -371,84 +265,6 @@ export default function HRDashboard() {
             </CardContent>
           </Card>
 
-<<<<<<< HEAD
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        {/* Hiring Funnel */}
-        <Card className="border-slate-200 dark:border-slate-800">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-slate-900 dark:text-white">Hiring Funnel</h3>
-              <BarChart3 className="h-5 w-5 text-blue-600" />
-            </div>
-            <div className="space-y-4">
-              {hiringFunnel.map((stage, index) => (
-                <div key={stage.stage}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm text-slate-600 dark:text-slate-400">{stage.stage}</span>
-                    <span className="text-sm font-medium text-slate-900 dark:text-white">{stage.count}</span>
-                  </div>
-                  <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3">
-                    <div 
-                      className={`${stage.color} h-3 rounded-full transition-all duration-500`}
-                      style={{ width: `${(stage.count / maxFunnel) * 100}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Monthly Hiring Trend */}
-        <Card className="border-slate-200 dark:border-slate-800">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-slate-900 dark:text-white">Monthly Hiring</h3>
-              <TrendingUp className="h-5 w-5 text-green-600" />
-            </div>
-            <div className="flex items-end justify-between gap-4 h-48">
-              {monthlyHiring.map((data) => (
-                <div key={data.month} className="flex-1 flex flex-col items-center gap-2">
-                  <div className="w-full flex flex-col items-center justify-end" style={{ height: '100%' }}>
-                    <span className="text-xs font-medium text-slate-900 dark:text-white mb-1">{data.hired}</span>
-                    <div 
-                      className="w-full bg-gradient-to-t from-green-500 to-emerald-400 rounded-t-lg transition-all duration-500"
-                      style={{ height: `${(data.hired / maxHired) * 100}%`, minHeight: '20px' }}
-                    />
-                  </div>
-                  <span className="text-sm text-slate-600 dark:text-slate-400">{data.month}</span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Recent Jobs</h2>
-            <Link href="/hr/jobs">
-              <Button variant="ghost" size="sm">View All</Button>
-            </Link>
-          </div>
-          <div className="space-y-3">
-            {recentJobs.map((job) => (
-              <Card key={job.id} className="border-slate-200 dark:border-slate-800">
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-slate-900 dark:text-white">{job.title}</h3>
-                      <div className="flex items-center gap-3 mt-2 text-sm text-slate-600 dark:text-slate-400">
-                        <span className="flex items-center gap-1">
-                          <Users className="h-4 w-4" />
-                          {job.applicants} applicants
-                        </span>
-                        <span>•</span>
-                        <span>{job.posted}</span>
-                      </div>
-=======
           {/* Monthly Hiring */}
           <Card
             ref={trendRef}
@@ -463,7 +279,7 @@ export default function HRDashboard() {
                 <span className="text-xs text-slate-400">Last 6 months</span>
               </div>
               <div className="flex items-end justify-between gap-2 h-48">
-                {monthlyHiring.map((data, idx) => (
+                {monthlyHiring.map((data) => (
                   <div
                     key={data.month}
                     className="flex-1 flex flex-col items-center gap-2 group"
@@ -476,7 +292,6 @@ export default function HRDashboard() {
                         className="trend-bar w-full bg-gradient-to-t from-indigo-500 to-blue-500 rounded-t group-hover:from-indigo-600 group-hover:to-blue-600 transition-all duration-300"
                         style={{ height: 0 }}
                       />
->>>>>>> 843d47b8eb622fe5c116fb34bf1d6b17de7c4921
                     </div>
                     <span className="text-xs text-slate-500 dark:text-slate-400">
                       {data.month}
@@ -538,7 +353,7 @@ export default function HRDashboard() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Badge className={statusColors[job.status]}>
+                          <Badge className={statusColors[job.status as keyof typeof statusColors]}>
                             {job.status}
                           </Badge>
                           <Button
@@ -599,7 +414,7 @@ export default function HRDashboard() {
                             <span className="text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 px-2 py-0.5 rounded">
                               {applicant.score}% match
                             </span>
-                            <Badge className={statusColors[applicant.status]}>
+                            <Badge className={statusColors[applicant.status as keyof typeof statusColors]}>
                               {applicant.status}
                             </Badge>
                           </div>
@@ -619,7 +434,7 @@ export default function HRDashboard() {
           </div>
         </div>
 
-        {/* Loading state indicator (optional) */}
+        {/* Loading state indicator */}
         {!animationsReady && (
           <div className="fixed bottom-4 right-4 bg-white dark:bg-slate-800 shadow-lg rounded-full px-4 py-2 flex items-center gap-2 text-sm">
             <Loader2 className="h-4 w-4 animate-spin" />

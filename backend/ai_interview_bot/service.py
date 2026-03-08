@@ -1,5 +1,6 @@
 import os
 import base64
+import logging
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -7,6 +8,7 @@ load_dotenv()
 
 # configure OpenAI client
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+logger = logging.getLogger(__name__)
 
 
 def evaluate_response(session: dict) -> str:
@@ -26,16 +28,29 @@ def evaluate_response(session: dict) -> str:
     )
     messages.append({"role": "system", "content": system_prompt})
 
-    for entry in session.get("transcript", []):
-        role = "assistant" if entry["speaker"] == "bot" else "user"
-        messages.append({"role": role, "content": entry["message"]})
+    transcript = session.get("transcript", [])
+    
+    # If no transcript yet, ask for the initial question
+    if not transcript:
+        messages.append({
+            "role": "user",
+            "content": "Please ask the first technical interview question to assess the candidate's skills."
+        })
+        logger.info("Generating initial interview question")
+    else:
+        for entry in transcript:
+            role = "assistant" if entry["speaker"] == "bot" else "user"
+            messages.append({"role": role, "content": entry["message"]})
 
     try:
+        logger.info(f"Calling GPT with {len(messages)} messages")
         completion = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=messages
         )
-        return completion.choices[0].message.content
+        response = completion.choices[0].message.content
+        logger.info(f"GPT response: {response}")
+        return response
     except Exception as e:
-        print(f"[LLM evaluate error] {e}")
-        return "I'm sorry, I encountered an error and cannot continue the interview."
+        logger.error(f"[LLM evaluate error] {e}", exc_info=True)
+        return "I'm sorry, I encountered an error and cannot continue the interview. Please try again later."

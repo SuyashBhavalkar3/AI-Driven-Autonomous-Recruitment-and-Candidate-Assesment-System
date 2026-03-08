@@ -36,12 +36,12 @@ const formSchema = z
     fullName: z.string().min(2, "Full name must be at least 2 characters"),
     email: z.string().email("Invalid email address"),
     password: z.string().min(8, "Password must be at least 8 characters"),
-    role: z.enum(["candidate", "hr"]),
+    role: z.enum(["candidate", "hr"], { message: "Please select your role" }),
     company: z.string().optional(),
   })
   .refine(
     (data) => {
-      if (data.is_employer && !data.company) {
+      if (data.role === "hr" && !data.company) {
         return false;
       }
       return true;
@@ -73,12 +73,12 @@ export default function RegisterPage() {
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(formSchema),
-    mode: "onBlur",
+    mode: "onChange",
     defaultValues: {
       fullName: "",
       email: "",
       password: "",
-      role: roleFromUrl || "candidate",
+      role: "" as any,
       company: "",
     },
   });
@@ -92,7 +92,11 @@ export default function RegisterPage() {
       case 1:
         return formValues.fullName && formValues.email && formValues.password;
       case 2:
-        if (selectedRole === "hr") {
+        // Force explicit role selection - cannot proceed without selecting
+        if (!formValues.role) {
+          return false;
+        }
+        if (formValues.role === "hr") {
           return formValues.company && formValues.company.trim() !== "";
         }
         return true;
@@ -118,12 +122,14 @@ export default function RegisterPage() {
     setError(null);
     
     try {
+      const isEmployer = data.role === "hr";
+      
       // Register user
       const userData = await registerUser({
         fullName: data.fullName,
         email: data.email,
         password: data.password,
-        role: data.role,
+        is_employer: isEmployer,
         company: data.company,
       });
 
@@ -364,23 +370,30 @@ export default function RegisterPage() {
                       <Label className="text-sm font-medium text-[#4A443C]">I am a</Label>
                       <Controller
                         control={control}
-                        name="is_employer"
-                        render={({ field }) => (
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <SelectTrigger className="h-11 bg-white/60 backdrop-blur-sm border-[#D6CDC2] rounded-xl text-[#2D2A24]">
+                        name="role"
+                        render={({ field: { value, onChange } }) => (
+                          <Select value={value || ""} onValueChange={(newValue) => {
+                            onChange(newValue);
+                          }}>
+                            <SelectTrigger className={`h-11 bg-white/60 backdrop-blur-sm rounded-xl text-[#2D2A24] ${
+                              errors.role ? 'border-red-300 border-2' : 'border-[#D6CDC2]'
+                            }`}>
                               <SelectValue placeholder="Select your role" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="false">Candidate</SelectItem>
-                              <SelectItem value="true">Recruiter / HR</SelectItem>
+                              <SelectItem value="candidate">👤 Candidate - Find your next opportunity</SelectItem>
+                              <SelectItem value="hr">🏢 Recruiter / HR - Hire talented candidates</SelectItem>
                             </SelectContent>
                           </Select>
                         )}
                       />
+                      {errors.role && (
+                        <p className="text-sm text-red-600 font-medium">⚠️ {errors.role.message}</p>
+                      )}
                     </div>
 
                     <AnimatePresence>
-                      {selectedIsEmployer && (
+                      {selectedRole === "hr" && (
                         <motion.div
                           initial={{ opacity: 0, height: 0 }}
                           animate={{ opacity: 1, height: "auto" }}
@@ -423,7 +436,7 @@ export default function RegisterPage() {
                       Back
                     </Button>
                   )}
-                  {(currentStep < totalSteps && selectedRole === "candidate") || (currentStep < 2 && selectedRole === "hr") ? (
+                  {currentStep < totalSteps ? (
                     <Button
                       type="button"
                       onClick={nextStep}
