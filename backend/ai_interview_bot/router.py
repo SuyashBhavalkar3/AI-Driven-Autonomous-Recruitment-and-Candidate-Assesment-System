@@ -12,6 +12,7 @@ from .services.interview_script_generator import (
     generate_follow_up_question,
     evaluate_solution
 )
+from .services.adaptive_interview_bot import adaptive_bot
 
 router = APIRouter()
 session_manager = SessionManager()
@@ -79,30 +80,20 @@ async def interview_websocket(websocket: WebSocket, session_id: str, position: s
 
         # Send first question from the script
         try:
-            sections = interview_script.get("sections", [])
-            if sections:
-                # Start with introduction
-                intro_section = sections[0]
-                intro_text = intro_section.get("content", "")
-                
-                if intro_text:
-                    intro_audio = generate_speech(intro_text)
-                    session["current_section"] = 0
-                    session["current_question"] = 0
-                    
-                    try:
-                        await safe_send_json(websocket, {
-                            "type": "section_started",
-                            "section": intro_section.get("name", "Introduction"),
-                            "text": intro_text,
-                            "audio": intro_audio,
-                            "duration": intro_section.get("duration", 2)
-                        })
-                    except Exception as send_error:
-                        logger.error(f"Error sending introduction: {str(send_error)}")
-                    
-                    session_manager.add_transcript(session_id, "bot", intro_text)
-                    logger.info("Introduction sent to candidate")
+            # Use adaptive bot for greeting
+            greeting = adaptive_bot.generate_greeting(position, company)
+            greeting_audio = generate_speech(greeting)
+            session["current_stage"] = "greeting"
+            session_manager.add_transcript(session_id, "bot", greeting)
+            
+            await safe_send_json(websocket, {
+                "type": "section_started",
+                "section": "Greeting",
+                "text": greeting,
+                "audio": greeting_audio,
+                "stage": "greeting"
+            })
+            logger.info("Adaptive greeting sent to candidate")
                 
         except Exception as e:
             logger.error(f"Error sending introduction: {str(e)}", exc_info=True)
@@ -119,23 +110,61 @@ async def interview_websocket(websocket: WebSocket, session_id: str, position: s
                         response_text = message.get("text", "")
                         session_manager.add_transcript(session_id, "candidate", response_text)
                         
-                        # Generate follow-up question
-                        current_section = session.get("current_section", 0)
-                        sections = interview_script.get("sections", [])
+                        # Use adaptive interview bot
+                        bot_response = adaptive_bot.generate_next_question(
+                            session=session,
+                            candidate_response=response_text,
+                            position=position,
+                            company=company
+                        )
                         
-                        if current_section < len(sections):
-                            section = sections[current_section]
-                            follow_up = generate_follow_up_question(session, section.get("type", "technical"))
-                            follow_up_audio = generate_speech(follow_up)
+                        action = bot_response.get("action", "continue")
+                        bot_message = bot_response.get("message", "")
+                        
+                        # Handle refusal
+                        if action == "end_interview":
+                            session_manager.add_transcript(session_id, "bot", bot_message)
+                            await safe_send_json(websocket, {
+                                "type": "interview_ended",
+                                "text": bot_message,
+                                "reason": bot_response.get("reason", "candidate_declined")
+                            })
+                            session_manager.end_session(session_id)
+                            await websocket.close()
+                            break
+                        
+                        # Handle HITL escalation
+                        elif action == "escalate_to_human":
+                            session_manager.add_transcript(session_id, "bot", bot_message)
+                            await safe_send_json(websocket, {
+                                "type": "human_intervention_required",
+                                "text": bot_message,
+                                "reason": bot_response.get("reason", "human_requested")
+                            })
+                            logger.info(f"HITL escalation requested for session {session_id}")
+                            # Mark session for human review
+                            session["requires_human"] = True
+                            continue
+                        
+                        # Continue interview
+                        else:
+                            # Update stage if changed
+                            next_stage = bot_response.get("next_stage")
+                            if next_stage:
+                                session["current_stage"] = next_stage
                             
-                            session_manager.add_transcript(session_id, "bot", follow_up)
+                            # Generate speech
+                            bot_audio = generate_speech(bot_message)
+                            session_manager.add_transcript(session_id, "bot", bot_message)
                             
                             await safe_send_json(websocket, {
                                 "type": "follow_up_question",
-                                "text": follow_up,
-                                "audio": follow_up_audio
+                                "text": bot_message,
+                                "audio": bot_audio,
+                                "stage": next_stage,
+                                "metadata": bot_response.get("metadata", {})
                             })
-                            logger.info("Follow-up question sent")
+                            logger.info(f"Adaptive question sent - Stage: {next_stage}")
 
                     elif msg_type == "move_to_next_section":
                         current = session.get("current_section", 0)

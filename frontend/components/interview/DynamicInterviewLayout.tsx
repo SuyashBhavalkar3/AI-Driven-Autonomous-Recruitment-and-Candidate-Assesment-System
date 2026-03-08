@@ -7,6 +7,7 @@ import ConversationPanel from "./ConversationPanel";
 import { useCamera } from "@/hooks/useCamera";
 import { useTimer } from "@/hooks/useTimer";
 import { useProctoring } from "@/hooks/useProctoring";
+import { useSarvamTTS } from "@/hooks/useSarvamTTS";
 import {
   ConversationMessage,
   InterviewContext,
@@ -22,7 +23,7 @@ interface DynamicInterviewLayoutProps {
   position?: string;
 }
 
-const BACKEND_WS = process.env.NEXT_PUBLIC_BACKEND_WS || "ws://localhost:8000";
+const BACKEND_WS = process.env.NEXT_PUBLIC_BACKEND_WS || "ws://127.0.0.1:8000";
 
 export default function DynamicInterviewLayout({
   applicationId = "test",
@@ -44,6 +45,18 @@ export default function DynamicInterviewLayout({
 
   // WebSocket
   const wsRef = useRef<WebSocket | null>(null);
+
+  // TTS Hook
+  const {
+    speak: speakText,
+    isSpeaking: ttsIsSpeaking,
+  } = useSarvamTTS({
+    onSpeakingStart: () => setIsAISpeaking(true),
+    onSpeakingEnd: () => {
+      setIsAISpeaking(false);
+      setIsWaitingForResponse(false);
+    },
+  });
 
   // Camera & microphone
   const {
@@ -120,9 +133,17 @@ export default function DynamicInterviewLayout({
         metadata,
       };
       setMessages((prev) => [...prev, newMessage]);
+
+      // Auto-speak AI messages on arrival
+      if (role === "ai" && content) {
+        setTimeout(() => {
+          speakText(content);
+        }, 100);
+      }
+
       return newMessage;
     },
-    []
+    [speakText]
   );
 
   // Handle backend messages
@@ -137,7 +158,6 @@ export default function DynamicInterviewLayout({
       case "behavioral_question":
       case "follow_up_question":
         addMessage("ai", msg.text || msg.question);
-        setIsWaitingForResponse(true);
         break;
 
       case "coding_challenge":
@@ -146,7 +166,6 @@ export default function DynamicInterviewLayout({
           "ai",
           `Coding Challenge: ${msg.challenge?.title}\n\n${msg.challenge?.description}`
         );
-        setIsWaitingForResponse(true);
         break;
 
       case "code_evaluation":
@@ -313,6 +332,7 @@ export default function DynamicInterviewLayout({
               onSendMessage={handleSendMessage}
               isWaitingForResponse={isWaitingForResponse}
               isAISpeaking={isAISpeaking}
+              backendUrl={BACKEND_WS.replace('ws://', 'http://').replace('wss://', 'https://')}
             />
           </div>
 

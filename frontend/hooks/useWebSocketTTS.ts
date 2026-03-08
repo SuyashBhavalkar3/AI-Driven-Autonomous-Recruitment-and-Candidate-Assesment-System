@@ -4,7 +4,7 @@ interface UseWebSocketTTSProps {
   url?: string;
 }
 
-export function useWebSocketTTS({ url = 'ws://localhost:8000/tts' }: UseWebSocketTTSProps = {}) {
+export function useWebSocketTTS({ url = 'ws://127.0.0.1:8000/tts' }: UseWebSocketTTSProps = {}) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const socketRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
