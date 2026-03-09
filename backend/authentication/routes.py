@@ -8,7 +8,7 @@ from .models import User
 from .schemas import UserCreate, LoginRequest, Token, UserOut
 from .utils import get_password_hash, verify_password, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, get_current_user
 
-router = APIRouter()
+router = APIRouter(prefix="/v1/auth", tags=["Authentication"])
 
 
 @router.post("/register", response_model=UserOut)

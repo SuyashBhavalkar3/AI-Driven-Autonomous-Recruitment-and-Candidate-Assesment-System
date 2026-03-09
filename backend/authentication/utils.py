@@ -7,7 +7,7 @@ import jwt
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
-
+from fastapi.security import HTTPBasicCredentials, HTTPBearer
 from .database import get_db
 from .models import User
 
@@ -68,7 +68,7 @@ def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("sub")
         if user_id is None:
             raise credentials_exception
