@@ -1,20 +1,22 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 from datetime import datetime
 
 
 class UserCreate(BaseModel):
-    name: str
+    name: str = Field(..., min_length=2, max_length=100)
     email: EmailStr
-    password: str
-    is_employer: bool  # True for employer, False for candidate (from checkbox)
-    company: Optional[str] = None
+    password: str = Field(..., min_length=6, max_length=100)
+    is_employer: bool
+    company_name: Optional[str] = Field(None, max_length=200)
+    company_website: Optional[str] = Field(None, max_length=500)
+    company_description: Optional[str] = Field(None, max_length=2000)
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
-    is_employer: Optional[bool] = None  # Optional - will fetch from user record if not provided
+    is_employer: Optional[bool] = None
 
 
 class Token(BaseModel):
@@ -32,8 +34,18 @@ class UserOut(BaseModel):
     name: str
     email: EmailStr
     is_employer: bool
-    company: Optional[str] = None
+    company_name: Optional[str] = None
+    company_website: Optional[str] = None
+    company_description: Optional[str] = None
+    profile_completed: bool
     created_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=2, max_length=100)
+    company_name: Optional[str] = Field(None, max_length=200)
+    company_website: Optional[str] = Field(None, max_length=500)
+    company_description: Optional[str] = Field(None, max_length=2000)

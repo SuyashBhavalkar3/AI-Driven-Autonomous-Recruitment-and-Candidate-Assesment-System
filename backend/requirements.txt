@@ -13,7 +13,6 @@ aiofiles
 websockets
 requests
 gtts
-python-dotenv
-cloudinary 
+cloudinary
 pdfminer.six
 python-docx
