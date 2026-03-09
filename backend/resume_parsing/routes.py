@@ -1,4 +1,3 @@
-# 
 
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, APIRouter, Form
 from sqlalchemy.orm import Session
@@ -11,6 +10,7 @@ from resume_parsing.schemas import ResumeResponse
 from authentication.utils import get_current_user
 from resume_parsing.utils import parse_resume
 from resume_parsing.utils import save_parsed_data
+from authentication.models import User
 
 load_dotenv()
 router = APIRouter(prefix="/resume", tags=["Resume Parsing"])
@@ -23,12 +23,12 @@ cloudinary.config(
 
 @router.post("/upload-resume/", response_model=ResumeResponse)
 async def upload_resume(
-    user_id: int = Form(...),
+    #user_id: int = Form(...),
     phone: str = Form(...),
     linkedin_url: str = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     if file.content_type not in [
         "application/pdf",
@@ -54,7 +54,7 @@ async def upload_resume(
 
     # Save candidate base record (no parsed_data blob anymore)
     candidate = Candidate(
-        user_id=user_id,
+        user_id=current_user.id,
         phone=phone,
         linkedin_url=linkedin_url,
         resume_url=file_url,
