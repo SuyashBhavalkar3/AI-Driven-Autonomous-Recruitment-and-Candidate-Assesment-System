@@ -44,8 +44,6 @@ def create_job(job: JobCreate, db: Session = Depends(get_db),current_user: User 
     }
 
 
-
-
 @router.get("/")
 def get_all_jobs(db: Session = Depends(get_db)):
 

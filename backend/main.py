@@ -7,6 +7,7 @@ from authentication.database import engine, Base, init_db
 from authentication.routes import router as auth_router
 from resume_parsing.routes import router as resume_router
 from job_management_module.routes import router as jobs_router
+from ATS_score.route import router as ats_router
 
 Base.metadata.create_all(bind=engine)
 
@@ -30,12 +31,9 @@ app.include_router(code_router)
 app.include_router(tts_router)
 app.include_router(resume_router)
 app.include_router(jobs_router)
+app.include_router(ats_router)
 
 # Create tables on startup
 @app.on_event("startup")
 def on_startup():
     init_db()
-    
-app.include_router(auth_router)
-app.include_router(resume_router)
-app.include_router(jobs_router)
