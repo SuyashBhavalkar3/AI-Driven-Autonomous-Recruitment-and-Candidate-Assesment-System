@@ -4,3 +4,5 @@ __pycache__/
 codebits_env
 *.pyc
 *.pyo
+myenv
+/backend/.env

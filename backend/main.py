@@ -1,11 +1,12 @@
-from authentication.routes import router as auth_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from ai_interview_bot.router import router as ai_router
 from ai_interview_bot.code_router import code_router
 from ai_interview_bot.tts_router import router as tts_router
-from authentication.database import engine, Base
-from authentication.models import User
+from authentication.database import engine, Base, init_db
+from authentication.routes import router as auth_router
+from resume_parsing.routes import router as resume_router
+from job_management_module.routes import router as jobs_router
 
 Base.metadata.create_all(bind=engine)
 
@@ -23,8 +24,14 @@ app.add_middleware(
 def read_root():
     return {"status": "ai interview backend running"}
 
-app.include_router(ai_router)  # uses routes such as /ws/interview/{session_id}
-app.include_router(auth_router, prefix="/v1/auth", tags=["auth"])
-app.include_router(code_router)  # Code execution endpoints
-app.include_router(tts_router)  # TTS and STT endpoints
+app.include_router(ai_router)
+app.include_router(auth_router)
+app.include_router(code_router)
+app.include_router(tts_router)
+app.include_router(resume_router)
+app.include_router(jobs_router)
 
+# Create tables on startup
+@app.on_event("startup")
+def on_startup():
+    init_db()
