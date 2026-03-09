@@ -41,7 +41,7 @@ def parse_resume_with_groq(resume_text):
     full_prompt = f"{PARSING_PROMPT}\n\n{resume_text}"
 
     response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+        model="openai/gpt-oss-120b",
         messages=[
             {
                 "role": "system",
