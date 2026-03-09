@@ -1,0 +1,24 @@
+{
+  "name": "ai-driven-autonomous-recruitment-and-candidate-assesment-system",
+  "version": "1.0.0",
+  "description": "This is a hackathon project in pre-development phase. Below is a detailed description of the problem statement and proposed solution.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "vite"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SuyashBhavalkar3/AI-Driven-Autonomous-Recruitment-and-Candidate-Assesment-System.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/SuyashBhavalkar3/AI-Driven-Autonomous-Recruitment-and-Candidate-Assesment-System/issues"
+  },
+  "homepage": "https://github.com/SuyashBhavalkar3/AI-Driven-Autonomous-Recruitment-and-Candidate-Assesment-System#readme",
+  "dependencies": {
+    "vite": "^7.3.1"
+  }
+}
