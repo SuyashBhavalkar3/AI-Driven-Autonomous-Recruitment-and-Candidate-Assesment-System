@@ -35,3 +35,6 @@ app.include_router(jobs_router)
 @app.on_event("startup")
 def on_startup():
     init_db()
+    
+app.include_router(auth_router)
+app.include_router(resume_router)
