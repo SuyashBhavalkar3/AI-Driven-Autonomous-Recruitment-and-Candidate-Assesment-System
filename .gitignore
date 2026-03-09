@@ -5,4 +5,5 @@ codebits_env
 *.pyc
 *.pyo
 myenv
+node_modules
 /backend/.env
