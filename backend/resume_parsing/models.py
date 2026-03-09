@@ -30,6 +30,7 @@ class Education(Base):
     institution = Column(String)
     graduation_date = Column(String)
     location = Column(String)
+    marks = Column(String, nullable=True)
 
     candidate = relationship("Candidate", back_populates="education")
 
