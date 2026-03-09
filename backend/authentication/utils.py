@@ -1,7 +1,7 @@
 import os
 from datetime import datetime, timedelta
 from typing import Optional
-
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 import jwt
 from passlib.context import CryptContext
@@ -24,6 +24,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60
 # Use bcrypt safely
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+security = HTTPBearer()
 
 def get_password_hash(password: str) -> str:
     """
@@ -52,9 +53,12 @@ def create_access_token(user_id: int, is_employer: bool, expires_delta: Optional
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
-def get_current_user(credentials: HTTPBasicCredentials = Depends(HTTPBearer()), 
-                     db: Session = Depends(get_db)
-                     ) -> User:
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+    ) -> User:
+    token = credentials.credentials
     """
     Extract current user from JWT token and return a User object.
     """

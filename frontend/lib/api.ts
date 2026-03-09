@@ -1,7 +1,7 @@
 // API client for backend communication
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+import { removeAuthToken } from "./auth";
 export interface RegisterData {
   fullName: string;
   email: string;
@@ -73,12 +73,19 @@ export async function getCurrentUser(token: string): Promise<UserData> {
   const response = await fetch(`${API_BASE_URL}/v1/auth/me`, {
     method: 'GET',
     headers: {
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     },
   });
 
+  if (response.status === 401) {
+    // token invalid
+    removeAuthToken();
+    window.location.href = "/login";
+    throw new Error("Unauthorized");
+  }
+
   if (!response.ok) {
-    throw new Error('Failed to fetch user data');
+    throw new Error("Failed to fetch user data");
   }
 
   return response.json();

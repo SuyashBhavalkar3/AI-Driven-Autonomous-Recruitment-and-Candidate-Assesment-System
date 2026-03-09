@@ -9,5 +9,13 @@ pydantic[email]
 pyJWT
 cloudinary
 groq 
+openai
+pydub
+aiofiles
+websockets
+requests
+gtts
+python-dotenv
+cloudinary 
 pdfminer.six
 python-docx

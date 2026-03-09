@@ -103,8 +103,8 @@ export default function Home() {
                   whileTap={{ scale: 0.95 }}
                 >
                   <Button size="lg" asChild>
-                    <Link href="/register">
-                      Get Started <ArrowRight className="ml-2 h-4 w-4" />
+                    <Link href="/register?role=hr">
+                      For HR <ArrowRight className="ml-2 h-4 w-4" />
                     </Link>
                   </Button>
                 </motion.div>
@@ -113,8 +113,18 @@ export default function Home() {
                   whileTap={{ scale: 0.95 }}
                 >
                   <Button size="lg" variant="outline" asChild>
+                    <Link href="/register?role=candidate">
+                      For Candidates <ArrowRight className="ml-2 h-4 w-4" />
+                    </Link>
+                  </Button>
+                </motion.div>
+                <motion.div
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Button size="lg" variant="secondary" asChild>
                     <Link href="/login">
-                      Login <ArrowRight className="ml-2 h-4 w-4" />
+                      Login
                     </Link>
                   </Button>
                 </motion.div>

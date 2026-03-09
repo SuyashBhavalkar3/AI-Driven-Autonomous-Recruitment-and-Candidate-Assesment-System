@@ -1,11 +1,14 @@
 import os
 import json
-from groq import Groq
+from openai import OpenAI
 from pdfminer.high_level import extract_text as extract_pdf_text
 from docx import Document
 from resume_parsing.prompt import PARSING_PROMPT
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-client = Groq()
+
+# Load OpenAI API key
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 
 def extract_text(file_stream, filename: str):
