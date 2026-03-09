@@ -4,6 +4,7 @@ import type { NextRequest } from 'next/server';
 export function middleware(request: NextRequest) {
   const token = request.cookies.get('auth_token')?.value;
   const role = request.cookies.get('user_role')?.value;
+ 
   const { pathname } = request.nextUrl;
 
   // Public routes that don't require authentication
