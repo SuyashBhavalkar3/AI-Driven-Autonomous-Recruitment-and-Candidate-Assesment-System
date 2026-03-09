@@ -504,20 +504,7 @@ export default function RegisterPage() {
                 </div>
               </div>
 
-              <motion.p
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="text-center text-sm text-slate-600 dark:text-slate-400"
-              >
-                Already have an account?{' '}
-                <Link
-                  href="/login"
-                  className="text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 font-medium"
-                >
-                  Sign in
-                </Link>
-              </motion.p>
+             
             </form>
           </div>
         </div>
