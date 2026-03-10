@@ -125,7 +125,7 @@ export default function HRLayout({ children }: { children: React.ReactNode }) {
               </Avatar>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
-                  {userData?.full_name || "Loading..."}
+                  {userData?.name || "Loading..."}
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
                   {userData?.email || ""}

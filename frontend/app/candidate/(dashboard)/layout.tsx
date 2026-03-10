@@ -33,7 +33,7 @@ import { calculateProfileCompletion } from "@/lib/profileCompletion";
 
 /* ------------------ Types ------------------ */
 interface User {
-  full_name: string;
+  name: string;
   email: string;
   avatar?: string;
   phone?: string;
@@ -143,7 +143,7 @@ export default function CandidateLayout({
 
   // Calculate profile completion
   const profileStatus = calculateProfileCompletion({
-    fullName: user?.full_name || "",
+    fullName: user?.name || "",
     email: user?.email || "",
     phone: user?.phone || "",
     location: user?.location || "",
@@ -329,7 +329,7 @@ export default function CandidateLayout({
                   <>
                     <AvatarImage src={user?.avatar} />
                     <AvatarFallback className="bg-[#B8915C]/10 text-[#B8915C]">
-                      {user?.full_name?.[0] ?? "U"}
+                      {user?.name?.[0] ?? "U"}
                     </AvatarFallback>
                   </>
                 )}
@@ -344,7 +344,7 @@ export default function CandidateLayout({
                 ) : (
                   <>
                     <p className="truncate text-sm font-medium text-[#2D2A24] dark:text-white">
-                      {user?.full_name}
+                      {user?.name}
                     </p>
                     <p className="truncate text-xs text-[#5A534A] dark:text-slate-400">
                       {user?.email}
