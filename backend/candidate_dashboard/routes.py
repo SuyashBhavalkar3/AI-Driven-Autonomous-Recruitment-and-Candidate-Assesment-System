@@ -84,7 +84,6 @@ def get_activity(
     return [{
         "id": a.id,
         "job_title": a.job.title,
-        "company": a.job.company_name,
         "status": a.status,
         "updated_at": a.updated_at,
         "resume_score": a.resume_match_score,

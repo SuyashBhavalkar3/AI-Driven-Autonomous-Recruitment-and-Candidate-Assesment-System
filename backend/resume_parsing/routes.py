@@ -19,8 +19,8 @@ router = APIRouter(prefix="/v1/resume", tags=["Resume Parsing"], dependencies=[D
 
 cloudinary.config(
     cloud_name=os.getenv("CLOUD_NAME"),
-    api_key=os.getenv("API_KEY"),
-    api_secret=os.getenv("API_SECRET")
+    api_key=os.getenv("CLOUDINARY_API_KEY"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET")
 )
 
 @router.post("/upload", response_model=ResumeResponse, status_code=status.HTTP_201_CREATED)

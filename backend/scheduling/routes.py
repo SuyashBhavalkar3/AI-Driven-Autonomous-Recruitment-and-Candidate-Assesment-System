@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from authentication.database import get_db
 from authentication.utils import get_current_user
 from authentication.models import User
@@ -61,7 +61,7 @@ async def create_schedule(
     if application.job.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="Unauthorized")
     
-    if schedule_data.scheduled_time <= datetime.now():
+    if schedule_data.scheduled_time <= datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Schedule time must be in future")
     
     schedule = Schedule(**schedule_data.dict())
@@ -121,7 +121,7 @@ async def reschedule(
     if schedule.rescheduled_count >= 2:
         raise HTTPException(status_code=400, detail="Maximum reschedule limit reached")
     
-    if new_time <= datetime.now():
+    if new_time <= datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Time must be in future")
     
     schedule.scheduled_time = new_time

@@ -28,10 +28,11 @@ class ApplicationResponse(BaseModel):
         from_attributes = True
 
 class ApplicationDetailResponse(ApplicationResponse):
-    assessment_data: Optional[Dict[str, Any]]
-    interview_transcript: Optional[Dict[str, Any]]
-    interview_feedback: Optional[Dict[str, Any]]
-    job: Optional[Dict[str, Any]]
+    assessment_data: Optional[Dict[str, Any]] = None
+    interview_transcript: Optional[Dict[str, Any]] = None
+    interview_feedback: Optional[Dict[str, Any]] = None
+    job: Optional[Dict[str, Any]] = None
     
     class Config:
         from_attributes = True
+        arbitrary_types_allowed = True
