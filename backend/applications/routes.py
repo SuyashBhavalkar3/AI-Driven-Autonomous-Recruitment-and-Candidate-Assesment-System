@@ -113,7 +113,6 @@ def get_my_application_detail(
     if not application:
         raise HTTPException(status_code=404, detail="Application not found")
     
-<<<<<<< HEAD
     return {
         **ApplicationResponse.model_validate(application).model_dump(),
         "assessment_data": application.assessment_data,
@@ -126,9 +125,6 @@ def get_my_application_detail(
             "location": application.job.location
         } if application.job else None
     }
-=======
-    return application
->>>>>>> e734a32e392ecdc82a59db31c10c0675be38a499
 
 
 # HR ROUTES
@@ -217,7 +213,6 @@ def get_application_detail_hr(
     if application.job.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="Unauthorized access")
     
-<<<<<<< HEAD
     return {
         **ApplicationResponse.model_validate(application).model_dump(),
         "assessment_data": application.assessment_data,
@@ -230,9 +225,6 @@ def get_application_detail_hr(
             "location": application.job.location
         } if application.job else None
     }
-=======
-    return application
->>>>>>> e734a32e392ecdc82a59db31c10c0675be38a499
 
 
 @router.patch("/application/{application_id}", response_model=ApplicationResponse)

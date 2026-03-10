@@ -28,7 +28,6 @@ class ApplicationResponse(BaseModel):
         from_attributes = True
 
 class ApplicationDetailResponse(ApplicationResponse):
-<<<<<<< HEAD
     assessment_data: Optional[Dict[str, Any]] = None
     interview_transcript: Optional[Dict[str, Any]] = None
     interview_feedback: Optional[Dict[str, Any]] = None
@@ -37,12 +36,3 @@ class ApplicationDetailResponse(ApplicationResponse):
     class Config:
         from_attributes = True
         arbitrary_types_allowed = True
-=======
-    assessment_data: Optional[Dict[str, Any]]
-    interview_transcript: Optional[Dict[str, Any]]
-    interview_feedback: Optional[Dict[str, Any]]
-    job: Optional[Dict[str, Any]]
-    
-    class Config:
-        from_attributes = True
->>>>>>> e734a32e392ecdc82a59db31c10c0675be38a499
