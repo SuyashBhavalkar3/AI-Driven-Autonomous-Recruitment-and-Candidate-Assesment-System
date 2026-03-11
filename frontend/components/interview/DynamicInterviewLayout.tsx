@@ -45,6 +45,7 @@ export default function DynamicInterviewLayout({
 
   // WebSocket
   const wsRef = useRef<WebSocket | null>(null);
+  const isCleaningUpRef = useRef(false);
 
   // TTS Hook
   const {
@@ -83,46 +84,7 @@ export default function DynamicInterviewLayout({
     },
   });
 
-  // Initialize WebSocket connection
-  useEffect(() => {
-    const sessionId = `app_${applicationId}_${Date.now()}`;
-
-    try {
-      const wsUrl = `${BACKEND_WS}/ws/interview/${sessionId}?position=${encodeURIComponent(
-        position
-      )}&company=${encodeURIComponent(company)}`;
-      wsRef.current = new WebSocket(wsUrl);
-
-      wsRef.current.onopen = () => {
-        console.log("WebSocket connected");
-        addMessage("system", "Interview started. Connecting to AI interviewer...");
-      };
-
-      wsRef.current.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        console.log("Backend message:", msg);
-        handleBackendMessage(msg);
-      };
-
-      wsRef.current.onerror = () => {
-        console.error("WebSocket error");
-        addMessage("system", "Connection error occurred");
-      };
-
-      wsRef.current.onclose = () => {
-        console.log("WebSocket disconnected");
-      };
-
-      return () => {
-        if (wsRef.current) wsRef.current.close();
-      };
-    } catch (error) {
-      console.error("WebSocket setup failed:", error);
-      addMessage("system", "Failed to connect to interview server");
-    }
-  }, [applicationId, position, company]);
-
-  // Add message to conversation
+  // Add message to conversation (no dependencies issue)
   const addMessage = useCallback(
     (role: "candidate" | "ai" | "system", content: string, metadata?: any) => {
       const newMessage: ConversationMessage = {
@@ -147,32 +109,61 @@ export default function DynamicInterviewLayout({
   );
 
   // Handle backend messages
-  const handleBackendMessage = (msg: any) => {
+  const handleBackendMessage = useCallback((msg: any) => {
     switch (msg.type) {
       case "interview_started":
-        addMessage("ai", `Welcome! Starting interview for ${position} at ${company}`);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `msg_${Date.now()}`,
+            role: "ai",
+            content: `Welcome! Starting interview for ${msg.position || position} at ${msg.company || company}`,
+            timestamp: Date.now(),
+          },
+        ]);
         setIsWaitingForResponse(false);
         break;
 
       case "section_started":
       case "behavioral_question":
       case "follow_up_question":
-        addMessage("ai", msg.text || msg.question);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `msg_${Date.now()}`,
+            role: "ai",
+            content: msg.text || msg.question,
+            timestamp: Date.now(),
+          },
+        ]);
+        if (msg.text || msg.question) {
+          setTimeout(() => speakText(msg.text || msg.question), 100);
+        }
         break;
 
       case "coding_challenge":
         setCurrentCodingProblem(msg.challenge);
-        addMessage(
-          "ai",
-          `Coding Challenge: ${msg.challenge?.title}\n\n${msg.challenge?.description}`
-        );
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `msg_${Date.now()}`,
+            role: "ai",
+            content: `Coding Challenge: ${msg.challenge?.title}\n\n${msg.challenge?.description}`,
+            timestamp: Date.now(),
+          },
+        ]);
         break;
 
       case "code_evaluation":
-        addMessage(
-          "ai",
-          `Score: ${msg.evaluation?.score}/100\nFeedback: ${msg.evaluation?.feedback}`
-        );
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `msg_${Date.now()}`,
+            role: "ai",
+            content: `Score: ${msg.evaluation?.score}/100\nFeedback: ${msg.evaluation?.feedback}`,
+            timestamp: Date.now(),
+          },
+        ]);
         setContext((prev) => ({
           ...prev,
           score:
@@ -183,40 +174,179 @@ export default function DynamicInterviewLayout({
         break;
 
       case "execution_result":
-        addMessage(
-          "system",
-          `Execution Output:\n${msg.output || msg.error || "No output"}`,
+        setMessages((prev) => [
+          ...prev,
           {
-            executionResult: { output: msg.output, error: msg.error },
-          }
-        );
+            id: `msg_${Date.now()}`,
+            role: "system",
+            content: `Execution Output:\n${msg.output || msg.error || "No output"}`,
+            timestamp: Date.now(),
+            metadata: {
+              executionResult: { output: msg.output, error: msg.error },
+            },
+          },
+        ]);
         break;
 
       case "interview_complete":
-        handleInterviewEnd();
+      case "interview_ended":
+        setCompleted(true);
         break;
 
       case "error":
-        addMessage("system", `Error: ${msg.message}`);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `msg_${Date.now()}`,
+            role: "system",
+            content: `Error: ${msg.message}`,
+            timestamp: Date.now(),
+          },
+        ]);
         if (msg.critical) {
           disqualify(msg.message);
         }
         break;
     }
-  };
+  }, [position, company, speakText, disqualify]);
+
+  // Initialize WebSocket connection
+  useEffect(() => {
+    const sessionId = `app_${applicationId}_${Date.now()}`;
+    let ws: WebSocket | null = null;
+    let mounted = true;
+
+    console.log("🔌 Initializing WebSocket connection...");
+
+    try {
+      const wsUrl = `${BACKEND_WS}/ws/interview/${sessionId}?position=${encodeURIComponent(
+        position
+      )}&company=${encodeURIComponent(company)}`;
+      ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        if (!mounted) return;
+        console.log("✅ WebSocket connected");
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `msg_${Date.now()}`,
+            role: "system",
+            content: "Interview started. Connecting to AI interviewer...",
+            timestamp: Date.now(),
+          },
+        ]);
+      };
+
+      ws.onmessage = (event) => {
+        if (!mounted) return;
+        const msg = JSON.parse(event.data);
+        console.log("📨 Backend message:", msg);
+        handleBackendMessage(msg);
+      };
+
+      ws.onerror = (error) => {
+        if (!mounted) return;
+        console.error("❌ WebSocket error:", error);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `msg_${Date.now()}`,
+            role: "system",
+            content: "Connection error occurred",
+            timestamp: Date.now(),
+          },
+        ]);
+      };
+
+      ws.onclose = (event) => {
+        console.log("🔌 WebSocket closed:", event.code, event.reason);
+      };
+    } catch (error) {
+      console.error("❌ WebSocket setup failed:", error);
+      if (mounted) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `msg_${Date.now()}`,
+            role: "system",
+            content: "Failed to connect to interview server",
+            timestamp: Date.now(),
+          },
+        ]);
+      }
+    }
+
+    // Cleanup on unmount or navigation
+    return () => {
+      mounted = false;
+      console.log("🧹 Cleaning up WebSocket connection...");
+      
+      if (ws) {
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+          console.log("🔌 Closing WebSocket (state:", ws.readyState, ")");
+          ws.close(1000, "Component unmounted");
+        }
+        ws.onopen = null;
+        ws.onmessage = null;
+        ws.onerror = null;
+        ws.onclose = null;
+      }
+      
+      wsRef.current = null;
+      console.log("✅ WebSocket cleanup complete");
+    };
+  }, [applicationId, position, company, handleBackendMessage]);
+
+  // Handle browser navigation/close
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      console.log("🚪 Page unloading, closing WebSocket...");
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.close(1000, "Page unload");
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        console.log("👁️ Page hidden");
+      } else {
+        console.log("👁️ Page visible");
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
 
   // Send message via WebSocket
-  const sendWebSocketMessage = (data: any) => {
+  const sendWebSocketMessage = useCallback((data: any) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(data));
+    } else {
+      console.warn("⚠️ WebSocket not open, cannot send message");
     }
-  };
+  }, []);
 
   // Handle candidate message submission
-  const handleSendMessage = (message: string) => {
+  const handleSendMessage = useCallback((message: string) => {
     if (!message.trim()) return;
 
-    addMessage("candidate", message);
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `msg_${Date.now()}`,
+        role: "candidate",
+        content: message,
+        timestamp: Date.now(),
+      },
+    ]);
     setIsWaitingForResponse(true);
 
     sendWebSocketMessage({
@@ -230,11 +360,19 @@ export default function DynamicInterviewLayout({
       lastCandidateResponse: message,
       questionsAsked: prev.questionsAsked + 1,
     }));
-  };
+  }, [context, sendWebSocketMessage]);
 
   // Handle code submission
-  const handleCodeSubmit = (code: string, language: string) => {
-    addMessage("candidate", `Submitted code in ${language}`);
+  const handleCodeSubmit = useCallback((code: string, language: string) => {
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `msg_${Date.now()}`,
+        role: "candidate",
+        content: `Submitted code in ${language}`,
+        timestamp: Date.now(),
+      },
+    ]);
     setIsWaitingForResponse(true);
 
     sendWebSocketMessage({
@@ -244,13 +382,19 @@ export default function DynamicInterviewLayout({
       problemId: currentCodingProblem?.id,
       context: context,
     });
-  };
+  }, [context, currentCodingProblem, sendWebSocketMessage]);
 
   // Handle interview end
-  const handleInterviewEnd = () => {
+  const handleInterviewEnd = useCallback(() => {
+    console.log("🏁 Interview ending...");
     setCompleted(true);
-    if (wsRef.current) wsRef.current.close();
-  };
+    
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      console.log("🔌 Closing WebSocket on interview end");
+      wsRef.current.close(1000, "Interview completed");
+      wsRef.current = null;
+    }
+  }, []);
 
   // Screens
   if (disqualified) {

@@ -39,55 +39,19 @@ import { enforceProfileCompletion } from "@/lib/profileEnforcement";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import gsap from "gsap";
+import { jobsAPI } from "@/lib/api";
 
-
-const jobs = [
-  {
-    id: 1,
-    title: "Senior Frontend Developer",
-    company: "TechCorp",
-    logo: "TC",
-    location: "San Francisco, CA",
-    workMode: "Remote",
-    salary: "$120k - $150k",
-    type: "Full-time",
-    posted: "2d ago",
-    description:
-      "We are looking for a senior frontend developer with React expertise to build next-generation web applications.",
-    skills: ["React", "TypeScript", "Tailwind", "Next.js"],
-    experience: "5+ years",
-  },
-  {
-    id: 2,
-    title: "Full Stack Engineer",
-    company: "InnovateLabs",
-    logo: "IL",
-    location: "New York, NY",
-    workMode: "Hybrid",
-    salary: "$130k - $160k",
-    type: "Full-time",
-    posted: "1w ago",
-    description:
-      "Join our team to build scalable applications that impact millions of users worldwide.",
-    skills: ["Node.js", "React", "PostgreSQL", "AWS"],
-    experience: "3-5 years",
-  },
-  {
-    id: 3,
-    title: "Backend Developer",
-    company: "DataFlow Inc",
-    logo: "DF",
-    location: "Austin, TX",
-    workMode: "On-site",
-    salary: "$110k - $140k",
-    type: "Full-time",
-    posted: "3d ago",
-    description:
-      "Build robust APIs and microservices for our data processing platform.",
-    skills: ["Python", "Django", "Redis", "Docker"],
-    experience: "4+ years",
-  },
-];
+interface Job {
+  id: number;
+  title: string;
+  description: string;
+  required_skills: string[];
+  experience_required: number;
+  location: string;
+  salary_range: string;
+  created_by: number;
+  created_at: string;
+}
 
 type ApplicationStatus = "idle" | "applying" | "success" | "rejected";
 
@@ -96,7 +60,7 @@ export default function JobsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [location, setLocation] = useState("");
   const [jobType, setJobType] = useState("");
-  const [selectedJob, setSelectedJob] = useState<typeof jobs[0] | null>(null);
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [applicationStatus, setApplicationStatus] =
     useState<ApplicationStatus>("idle");
   const [coverLetter, setCoverLetter] = useState("");
@@ -105,7 +69,24 @@ export default function JobsPage() {
   const [particles, setParticles] = useState<React.ReactNode[]>([]);
   const cardsRef = useRef<HTMLDivElement>(null);
   const { profileStatus, loading: profileLoading } = useProfileStatus();
+  const [jobs, setJobs] = useState<Job[]>([]);
 
+
+  // Fetch jobs from backend
+  useEffect(() => {
+    const fetchJobs = async () => {
+      try {
+        setLoading(true);
+        const response = await jobsAPI.getAllJobs();
+        setJobs(response.jobs || []);
+      } catch (error) {
+        console.error("Failed to fetch jobs:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchJobs();
+  }, []);
 
   // Simulate loading
   useEffect(() => {
@@ -157,12 +138,11 @@ export default function JobsPage() {
     return (
       job.title.toLowerCase().includes(searchTerm.toLowerCase()) &&
       (location === "" ||
-        job.location.toLowerCase().includes(location.toLowerCase())) &&
-      (jobType === "" || jobType === "all" || job.type === jobType)
+        job.location.toLowerCase().includes(location.toLowerCase()))
     );
   });
 
-  const handleApply = async (job: typeof jobs[0]) => {
+  const handleApply = async (job: Job) => {
     const canApply = await enforceProfileCompletion();
     if (!canApply) {
       return;
@@ -171,6 +151,10 @@ export default function JobsPage() {
     setApplicationStatus("idle");
     setCoverLetter("");
     setMatchScore(null);
+  };
+
+  const handleViewDetails = (jobId: number) => {
+    router.push(`/candidate/jobs/${jobId}`);
   };
 
   const submitApplication = async () => {
@@ -283,7 +267,7 @@ export default function JobsPage() {
                   <CardContent className="p-6">
                     <div className="flex gap-4">
                       <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-[#B8915C] to-[#9F7A4F] flex items-center justify-center text-white font-semibold flex-shrink-0">
-                        {job.logo}
+                        {job.title.substring(0, 2).toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-4">
@@ -292,46 +276,50 @@ export default function JobsPage() {
                               {job.title}
                             </h3>
                             <p className="text-[#5A534A] dark:text-slate-400 mt-1">
-                              {job.company}
+                              Job ID: {job.id}
                             </p>
                           </div>
-                          <Button
-                            onClick={() => handleApply(job)}
-                            size="sm"
-                            className="bg-[#B8915C] hover:bg-[#9F7A4F]"
-                          >
-                            Apply
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={() => handleViewDetails(job.id)}
+                              size="sm"
+                              variant="outline"
+                              className="border-[#B8915C] text-[#B8915C] hover:bg-[#B8915C]/10"
+                            >
+                              View Details
+                            </Button>
+                            <Button
+                              onClick={() => handleApply(job)}
+                              size="sm"
+                              className="bg-[#B8915C] hover:bg-[#9F7A4F]"
+                            >
+                              Apply
+                            </Button>
+                          </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-4 mt-3 text-sm text-[#5A534A] dark:text-slate-400">
                           <span className="flex items-center gap-1">
                             <MapPin className="h-4 w-4" />
                             {job.location}
                           </span>
-                          <Badge
-                            variant="secondary"
-                            className="bg-[#B8915C]/10 text-[#B8915C] border-none"
-                          >
-                            {job.workMode}
-                          </Badge>
                           <span className="flex items-center gap-1">
                             <DollarSign className="h-4 w-4" />
-                            {job.salary}
+                            {job.salary_range}
                           </span>
                           <span className="flex items-center gap-1">
                             <Briefcase className="h-4 w-4" />
-                            {job.experience}
+                            {job.experience_required}+ years
                           </span>
                           <span className="flex items-center gap-1">
                             <Clock className="h-4 w-4" />
-                            {job.posted}
+                            {new Date(job.created_at).toLocaleDateString()}
                           </span>
                         </div>
                         <p className="mt-3 text-[#5A534A] dark:text-slate-400 text-sm line-clamp-2">
                           {job.description}
                         </p>
                         <div className="flex flex-wrap gap-2 mt-3">
-                          {job.skills.map((skill) => (
+                          {job.required_skills?.slice(0, 4).map((skill) => (
                             <Badge
                               key={skill}
                               variant="outline"
@@ -340,6 +328,14 @@ export default function JobsPage() {
                               {skill}
                             </Badge>
                           ))}
+                          {job.required_skills?.length > 4 && (
+                            <Badge
+                              variant="outline"
+                              className="border-[#B8915C]/30 text-[#B8915C]"
+                            >
+                              +{job.required_skills.length - 4} more
+                            </Badge>
+                          )}
                         </div>
                       </div>
                     </div>
