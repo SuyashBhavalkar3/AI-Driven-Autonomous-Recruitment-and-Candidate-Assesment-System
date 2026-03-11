@@ -1,79 +1,93 @@
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, status, APIRouter, Form
+
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, APIRouter, Form
 from sqlalchemy.orm import Session
-import cloudinary
-import cloudinary.uploader
-import os
+import cloudinary, cloudinary.uploader
+import os, io
 from dotenv import load_dotenv
-import io
 from authentication.database import get_db
 from resume_parsing.models import Candidate
 from resume_parsing.schemas import ResumeResponse
 from authentication.utils import get_current_user
-from authentication.models import User
 from resume_parsing.utils import parse_resume
-from middleware.rate_limiter import rate_limiter
+from resume_parsing.utils import save_parsed_data
+from authentication.models import User
 
 load_dotenv()
-
-router = APIRouter(prefix="/v1/resume", tags=["Resume Parsing"], dependencies=[Depends(rate_limiter)])
+router = APIRouter(prefix="/resume", tags=["Resume Parsing"])
 
 cloudinary.config(
     cloud_name=os.getenv("CLOUD_NAME"),
-    api_key=os.getenv("API_KEY"),
-    api_secret=os.getenv("API_SECRET")
+    api_key=os.getenv("CLOUDINARY_API_KEY"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET")
 )
 
-@router.post("/upload", response_model=ResumeResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/upload-resume/", response_model=ResumeResponse)
 async def upload_resume(
+    #user_id: int = Form(...),
     phone: str = Form(...),
     linkedin_url: str = Form(...),
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    profile_photo: UploadFile = File(...),
+    bio: str = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    """Upload resume and parse it with AI"""
+    if file.content_type not in [
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ]:
+        raise HTTPException(status_code=400, detail="Only PDF and Word documents are allowed.")
     
-    if current_user.is_employer:
-        raise HTTPException(status_code=403, detail="Employers cannot upload resumes")
-    
-    # Check if candidate already has a profile
-    existing = db.query(Candidate).filter(Candidate.user_id == current_user.id).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Resume already uploaded. Use update endpoint to modify.")
-    
-    # Validate file type
-    if file.content_type not in ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]:
-        raise HTTPException(status_code=400, detail="Invalid file type. Only PDF and Word documents are allowed.")
-    
-    # Upload to Cloudinary
+    if profile_photo.content_type not in [
+    "image/jpeg",
+    "image/png",
+    "image/jpg",
+    "image/webp"
+    ]:
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG, JPG and WEBP images are allowed for profile photo.")
+
     try:
         file_bytes = await file.read()
+        photo_bytes = await profile_photo.read()
 
-        data = parse_resume(
-            io.BytesIO(file_bytes),
-            file.filename
-        )
+        # Parse resume text → structured JSON via LLM
+        parsed_data = parse_resume(io.BytesIO(file_bytes), file.filename)
 
+        # Upload file to Cloudinary
         upload_result = cloudinary.uploader.upload(
-            file_bytes,
-            resource_type="raw",
-            public_id=f"resumes/{current_user.id}_{file.filename}"
+            file_bytes, resource_type="raw", public_id=file.filename
         )
         file_url = upload_result["secure_url"]
+
+        # Upload profile photo
+        photo_upload = cloudinary.uploader.upload(
+        photo_bytes,
+        resource_type="image",
+        public_id=f"profile_{current_user.id}"
+        )
+
+        photo_url = photo_upload["secure_url"]
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
-    
-    # Save to database
-    resume = Candidate(
+        raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
+
+    # Save candidate base record (no parsed_data blob anymore)
+    candidate = Candidate(
         user_id=current_user.id,
         phone=phone,
         linkedin_url=linkedin_url,
         resume_url=file_url,
-        parsed_data=data
+        profile_photo_url=photo_url,
+        bio=bio
     )
-    
-    db.add(resume)
+    db.add(candidate)
     db.commit()
-    db.refresh(resume)
+    db.refresh(candidate)
 
-    return resume
+    # Save parsed sections into separate tables
+    if isinstance(parsed_data, dict) and "error" not in parsed_data:
+        save_parsed_data(db, candidate.id, parsed_data)
+        db.refresh(candidate)  # reload relationships
+
+    return candidate

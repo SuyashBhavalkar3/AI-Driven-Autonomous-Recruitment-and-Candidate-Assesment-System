@@ -10,6 +10,7 @@ class ExperienceCreate(BaseModel):
     end_date: Optional[str] = Field(None, min_length=4)
     is_current: bool = False
     description: Optional[str] = None
+    marks: Optional[str] = Field(None, max_length=50)
 
 class ExperienceResponse(ExperienceCreate):
     id: int
@@ -26,6 +27,9 @@ class EducationCreate(BaseModel):
     start_date: str = Field(..., min_length=4)
     end_date: Optional[str] = Field(None, min_length=4)
     grade: Optional[str] = Field(None, max_length=50)
+    graduation_date: Optional[str] = Field(None, min_length=4)
+    marks: Optional[str] = Field(None, max_length=50)
+    location: Optional[str] = Field(None, max_length=200)
 
 class EducationResponse(EducationCreate):
     id: int
@@ -36,8 +40,12 @@ class EducationResponse(EducationCreate):
         from_attributes = True
 
 class SkillCreate(BaseModel):
-    skill_name: str = Field(..., min_length=1, max_length=100)
-    proficiency: Optional[str] = Field(None, max_length=50)
+    languages: Optional[str] = None
+    backend_technologies: Optional[str] = None
+    databases: Optional[str] = None
+    ai_ml_frameworks: Optional[str] = None
+    tools_platforms: Optional[str] = None
+    core_competencies: Optional[str] = None
 
 class SkillResponse(SkillCreate):
     id: int
