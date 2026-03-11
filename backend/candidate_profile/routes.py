@@ -198,5 +198,11 @@ def get_profile_status(current_user: User = Depends(get_current_user), db: Sessi
         "resume_uploaded": True,
         "has_experience": len(candidate.experiences) > 0,
         "has_education": len(candidate.education) > 0,
-        "has_skills": len(candidate.skills) > 0
+        "has_skills": len(candidate.skills) > 0,
+        "phone": candidate.phone,
+        "location": candidate.location,
+        "linkedin_url": candidate.linkedin_url,
+        "profile_photo_url": candidate.profile_photo_url,
+        "bio": candidate.bio,
+        "resume_url": candidate.resume_url
     }

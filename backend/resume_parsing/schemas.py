@@ -9,7 +9,7 @@ from typing import Optional, Dict, Any, List
 class ResumeCreate(BaseModel):
     user_id: int
     phone: str = Field(..., min_length=10, max_length=20)
-    linkedin_url: str = Field(..., min_length=10)
+    linkedin_url: Optional[str] = Field(None, min_length=10)
 
 
 # -------------------------

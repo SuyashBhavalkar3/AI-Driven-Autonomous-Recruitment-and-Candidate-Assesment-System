@@ -1,6 +1,7 @@
 
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, APIRouter, Form
 from sqlalchemy.orm import Session
+from typing import Optional
 import cloudinary, cloudinary.uploader
 import os, io
 from dotenv import load_dotenv
@@ -25,10 +26,11 @@ cloudinary.config(
 async def upload_resume(
     #user_id: int = Form(...),
     phone: str = Form(...),
-    linkedin_url: str = Form(...),
+    linkedin_url: Optional[str] = Form(None),
     file: UploadFile = File(...),
     profile_photo: UploadFile = File(...),
-    bio: str = Form(None),
+    bio: Optional[str] = Form(None),
+    location: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -76,6 +78,7 @@ async def upload_resume(
     candidate = Candidate(
         user_id=current_user.id,
         phone=phone,
+        location=location,
         linkedin_url=linkedin_url,
         resume_url=file_url,
         profile_photo_url=photo_url,

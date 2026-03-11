@@ -35,6 +35,7 @@ class EducationResponse(EducationCreate):
     id: int
     candidate_id: int
     created_at: datetime
+    graduation_date: Optional[str] = None
     
     class Config:
         from_attributes = True

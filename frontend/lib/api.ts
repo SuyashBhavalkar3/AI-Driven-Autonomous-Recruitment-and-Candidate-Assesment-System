@@ -220,14 +220,22 @@ export interface UserProfile {
 
 export interface CandidateProfile {
   id: number;
-  user_id: number;
+  user_id?: number;
+  name: string;
+  email: string;
   phone: string;
+  location: string;
   linkedin_url: string;
   resume_url: string;
   profile_photo_url: string;
   bio: string;
   profile_completed: boolean;
-  user: UserProfile;
+  is_employer: boolean;
+  company_name?: string | null;
+  company_website?: string | null;
+  company_description?: string | null;
+  created_at?: string;
+  user?: UserProfile;
   education: Array<{
     id: number;
     institution: string;
@@ -260,7 +268,7 @@ export interface CandidateProfile {
 }
 
 export const profileAPI = {
-  getProfile: async (): Promise<UserProfile | null> => {
+  getProfile: async (): Promise<CandidateProfile | null> => {
     try {
       const res = await fetch(`${API_BASE_URL}/v1/auth/me`, {
         headers: getAuthHeaders(),
@@ -269,7 +277,49 @@ export const profileAPI = {
         if (res.status === 404) return null;
         throw new Error('Failed to fetch profile');
       }
-      return res.json();
+      const userProfile = await res.json();
+      
+      // Get candidate profile data
+      const candidateRes = await fetch(`${API_BASE_URL}/v1/candidate/profile-status`, {
+        headers: getAuthHeaders(),
+      });
+      
+      let candidateData: any = {
+        phone: '',
+        location: '',
+        linkedin_url: '',
+        profile_photo_url: '',
+        bio: '',
+        resume_url: '',
+      };
+      
+      if (candidateRes.ok) {
+        candidateData = await candidateRes.json();
+      }
+      
+      // Get experiences, education, and skills
+      const [expRes, eduRes, skillRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/v1/candidate/experiences`, { headers: getAuthHeaders() }).catch(() => ({ ok: false, json: async () => [] })),
+        fetch(`${API_BASE_URL}/v1/candidate/education`, { headers: getAuthHeaders() }).catch(() => ({ ok: false, json: async () => [] })),
+        fetch(`${API_BASE_URL}/v1/candidate/skills`, { headers: getAuthHeaders() }).catch(() => ({ ok: false, json: async () => [] })),
+      ]);
+      
+      const experiences = expRes.ok ? await expRes.json() : [];
+      const education = eduRes.ok ? await eduRes.json() : [];
+      const skills = skillRes.ok ? await skillRes.json() : [];
+      
+      return {
+        ...userProfile,
+        phone: candidateData.phone || '',
+        location: candidateData.location || '',
+        linkedin_url: candidateData.linkedin_url || '',
+        resume_url: candidateData.resume_url || '',
+        profile_photo_url: candidateData.profile_photo_url || '',
+        bio: candidateData.bio || '',
+        education,
+        experiences,
+        skills,
+      };
     } catch (error) {
       console.error('Profile fetch error:', error);
       return null;
@@ -277,31 +327,7 @@ export const profileAPI = {
   },
 
   getCandidateProfile: async (): Promise<CandidateProfile | null> => {
-    try {
-      // First get user profile
-      const userProfile = await profileAPI.getProfile();
-      if (!userProfile) return null;
-      
-      // Then try to get candidate-specific data
-      // This would need a separate endpoint or the user profile should include candidate data
-      return {
-        id: 0, // This would come from candidate table
-        user_id: userProfile.id,
-        phone: '',
-        linkedin_url: '',
-        resume_url: '',
-        profile_photo_url: '',
-        bio: '',
-        profile_completed: userProfile.profile_completed,
-        user: userProfile,
-        education: [],
-        experiences: [],
-        skills: [],
-      };
-    } catch (error) {
-      console.error('Candidate profile fetch error:', error);
-      return null;
-    }
+    return profileAPI.getProfile();
   },
 
   uploadResume: async (formData: FormData): Promise<CandidateProfile> => {
@@ -315,7 +341,11 @@ export const profileAPI = {
     });
     if (!res.ok) {
       const error = await res.json();
-      throw new Error(error.detail || 'Failed to upload resume');
+      console.error('Upload resume error:', error);
+      const errorMsg = typeof error.detail === 'string' 
+        ? error.detail 
+        : JSON.stringify(error.detail || error);
+      throw new Error(errorMsg || 'Failed to upload resume');
     }
     return res.json();
   },

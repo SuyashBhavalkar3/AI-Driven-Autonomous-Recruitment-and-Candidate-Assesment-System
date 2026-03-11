@@ -1,14 +1,17 @@
 "use client";
+import Loader from '@/components/Loader'
 
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import gsap from "gsap";
 import { calculateProfileCompletion, UserProfile } from "@/lib/profileCompletion";
+import { profileAPI } from "@/lib/api";
 import ProfileHeader from "@/components/candidate/ProfileHeader";
 import ProfileCompletionStatus from "@/components/candidate/ProfileCompletionStatus";
 import PersonalInfoCard from "@/components/candidate/PersonalInfoCard";
 import ResumeCard from "@/components/candidate/ResumeCard";
 import WorkExperienceCard from "@/components/candidate/WorkExperienceCard";
+import EducationCard from "@/components/candidate/EducationCard";
 
 export interface Experience {
   id: string;
@@ -19,6 +22,16 @@ export interface Experience {
   description: string;
 }
 
+export interface Education {
+  id: string;
+  institution: string;
+  degree: string;
+  fieldOfStudy: string;
+  startDate: string;
+  endDate: string;
+  grade: string;
+}
+
 export interface ValidationErrors {
   name?: string;
   email?: string;
@@ -26,26 +39,107 @@ export interface ValidationErrors {
   bio?: string;
   skills?: string;
   resume?: string;
+  profilePhoto?: string;
 }
 
 export default function CandidateProfile() {
   const [isEditing, setIsEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [profilePhoto, setProfilePhoto] = useState<string>("");
+  const [profilePhotoFile, setProfilePhotoFile] = useState<File | null>(null);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [profileData, setProfileData] = useState< | null>(null);
   const [formData, setFormData] = useState({
-    name: "John Doe",
-    email: "john@example.com", // This will be read‑only
+    name: "",
+    email: "",
     phone: "",
     location: "",
     bio: "",
     skills: [] as string[],
+    linkedin_url: "",
   });
   const [skillInput, setSkillInput] = useState("");
   const [experiences, setExperiences] = useState<Experience[]>([]);
+  const [education, setEducation] = useState<Education[]>([]);
   const [particles, setParticles] = useState<React.ReactNode[]>([]);
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const pageRef = useRef<HTMLDivElement>(null);
+
+  // Load profile data on mount
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const profile = await profileAPI.getProfile();
+        
+        if (profile) {
+          setProfileData(profile);
+          console.log(profile);
+          // Set form data from profile
+          setFormData({
+            name: profile.name,
+            email: profile.email,
+            phone: profile.phone || "",
+            location: profile.location,
+            bio: profile.bio || "",
+            skills: profile.skills?.length > 0 ? 
+              Object.values(profile.skills[0]).filter(Boolean).join(', ').split(', ') : [],
+            linkedin_url: profile.linkedin_url || "",
+          });
+          
+          setProfilePhoto(profile.profile_photo_url || "");
+          
+          // Set experiences from profile
+          setExperiences(profile.experiences?.map(exp => ({
+            id: exp.id.toString(),
+            jobTitle: exp.job_title,
+            company: exp.company_name,
+            startDate: exp.start_date,
+            endDate: exp.end_date || "",
+            description: exp.description || "",
+          })) || []);
+          
+          // Set education from profile
+          setEducation(profile.education?.map(edu => ({
+            id: edu.id.toString(),
+            institution: edu.institution,
+            degree: edu.degree,
+            fieldOfStudy: edu.field_of_study || "",
+            startDate: edu.start_date,
+            endDate: edu.end_date || "",
+            grade: edu.grade || "",
+          })) || []);
+        } else {
+          // No profile exists, set defaults
+          setFormData({
+            name: "",
+            email: "",
+            phone: "",
+            location: "",
+            bio: "",
+            skills: [],
+            linkedin_url: "",
+          });
+        }
+        
+      } catch (error) {
+        console.error('Failed to load profile:', error);
+        // Set default values on error
+        setFormData({
+          name: "",
+          email: "",
+          phone: "",
+          location: "",
+          bio: "",
+          skills: [],
+          linkedin_url: "",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadProfile();
+  }, []);
 
   // Generate decorative particles
   useEffect(() => {
@@ -99,7 +193,7 @@ export default function CandidateProfile() {
     location: formData.location,
     bio: formData.bio,
     skills: formData.skills,
-    resume: resumeFile ? "uploaded" : "",
+    resume: resumeFile ? "uploaded" : (profileData?.resume_url ? "uploaded" : ""),
     experiences: experiences.map((exp) => ({
       jobTitle: exp.jobTitle,
       company: exp.company,
@@ -118,8 +212,6 @@ export default function CandidateProfile() {
       newErrors.name = "Full name is required";
     }
 
-    // Email is read‑only – we assume it is always valid from the backend
-    // but we can still check that it exists (should never be empty)
     if (!formData.email.trim()) {
       newErrors.email = "Email is required";
     }
@@ -129,6 +221,8 @@ export default function CandidateProfile() {
       if (!phoneRegex.test(formData.phone.replace(/\s/g, ""))) {
         newErrors.phone = "Please enter a valid phone number";
       }
+    } else {
+      newErrors.phone = "Phone number is required";
     }
 
     if (!formData.bio.trim()) {
@@ -143,9 +237,13 @@ export default function CandidateProfile() {
       newErrors.skills = "Please add at least 3 skills";
     }
 
-    if (!resumeFile) {
+    if (!profilePhoto && !profileData?.profile_photo_url) {
+      newErrors.profilePhoto = "Profile photo is required";
+    }
+
+    if (!resumeFile && !profileData?.resume_url) {
       newErrors.resume = "Resume is required";
-    } else {
+    } else if (resumeFile) {
       const maxSize = 5 * 1024 * 1024; // 5MB
       if (resumeFile.size > maxSize) {
         newErrors.resume = "Resume file size must be less than 5MB";
@@ -173,9 +271,12 @@ export default function CandidateProfile() {
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setProfilePhotoFile(file);
       const reader = new FileReader();
       reader.onloadend = () => setProfilePhoto(reader.result as string);
       reader.readAsDataURL(file);
+      setErrors((prev) => ({ ...prev, profilePhoto: undefined }));
+      setTouched((prev) => ({ ...prev, profilePhoto: true }));
     }
   };
 
@@ -203,7 +304,7 @@ export default function CandidateProfile() {
     setErrors(validateForm());
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const validationErrors = validateForm();
     setErrors(validationErrors);
     setTouched({
@@ -213,12 +314,108 @@ export default function CandidateProfile() {
       bio: true,
       skills: true,
       resume: true,
+      profilePhoto: true,
     });
 
     if (Object.keys(validationErrors).length === 0) {
-      console.log("Saving profile:", { formData, profilePhoto, resumeFile, experiences });
-      setIsEditing(false);
-      setTouched({});
+      try {
+        setLoading(true);
+        
+        // Resume file is required for new profiles
+        if (resumeFile && (profilePhotoFile || profileData?.profile_photo_url)) {
+          const formDataToSend = new FormData();
+          formDataToSend.append('phone', formData.phone);
+          if (formData.linkedin_url) {
+            formDataToSend.append('linkedin_url', formData.linkedin_url);
+          }
+          formDataToSend.append('bio', formData.bio);
+          formDataToSend.append('file', resumeFile);
+          
+          // Handle profile photo
+          if (profilePhotoFile) {
+            formDataToSend.append('profile_photo', profilePhotoFile);
+          } else if (profileData?.profile_photo_url) {
+            const response = await fetch(profileData.profile_photo_url);
+            const blob = await response.blob();
+            formDataToSend.append('profile_photo', blob, 'profile.jpg');
+          }
+
+          console.log('Sending FormData with:', {
+            phone: formData.phone,
+            linkedin_url: formData.linkedin_url,
+            bio: formData.bio,
+            hasFile: !!resumeFile,
+            hasPhoto: !!profilePhotoFile || !!profileData?.profile_photo_url
+          });
+
+          const updatedProfile = await profileAPI.uploadResume(formDataToSend);
+          setProfileData(updatedProfile);
+        } else if (!profileData?.resume_url) {
+          throw new Error('Please upload both resume and profile photo');
+        }
+        
+        // Add skills if they don't exist
+        if (formData.skills.length > 0 && (!profileData?.skills || profileData.skills.length === 0)) {
+          try {
+            await profileAPI.addSkill({
+              core_competencies: formData.skills.join(', ')
+            });
+          } catch (error) {
+            console.error('Failed to add skills:', error);
+          }
+        }
+        
+        // Add experiences if they don't exist
+        if (experiences.length > 0 && (!profileData?.experiences || profileData.experiences.length === 0)) {
+          for (const exp of experiences) {
+            try {
+              await profileAPI.addExperience({
+                company_name: exp.company,
+                job_title: exp.jobTitle,
+                start_date: exp.startDate,
+                end_date: exp.endDate || undefined,
+                description: exp.description || undefined,
+                is_current: !exp.endDate,
+              });
+            } catch (error) {
+              console.error('Failed to add experience:', exp, error);
+            }
+          }
+        }
+        
+        // Add education if they don't exist
+        if (education.length > 0 && (!profileData?.education || profileData.education.length === 0)) {
+          for (const edu of education) {
+            try {
+              await profileAPI.addEducation({
+                institution: edu.institution,
+                degree: edu.degree,
+                field_of_study: edu.fieldOfStudy || undefined,
+                start_date: edu.startDate,
+                end_date: edu.endDate || undefined,
+                grade: edu.grade || undefined,
+              });
+            } catch (error) {
+              console.error('Failed to add education:', edu, error);
+            }
+          }
+        }
+        
+        setIsEditing(false);
+        setTouched({});
+        
+        // Reload profile data
+        const refreshedProfile = await profileAPI.getProfile();
+        if (refreshedProfile) {
+          setProfileData(refreshedProfile);
+        }
+        
+      } catch (error) {
+        console.error('Failed to save profile:', error);
+        alert(`Failed to save profile: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+        setLoading(false);
+      }
     } else {
       const firstErrorField = Object.keys(validationErrors)[0];
       document.getElementById(`field-${firstErrorField}`)?.scrollIntoView({
@@ -233,42 +430,52 @@ export default function CandidateProfile() {
       {/* Decorative particles */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">{particles}</div>
 
-      <div className="relative z-10 max-w-4xl mx-auto px-4 py-8">
-        <ProfileHeader isEditing={isEditing} setIsEditing={setIsEditing} onSave={handleSave} />
+      {loading ? (
+    <Loader/>
+      ) : (
+        <div className="relative z-10 max-w-4xl mx-auto px-4 py-8">
+          <ProfileHeader isEditing={isEditing} setIsEditing={setIsEditing} onSave={handleSave} />
 
-        <ProfileCompletionStatus profileStatus={profileStatus} />
+          <ProfileCompletionStatus profileStatus={profileStatus} />
 
-        <div className="space-y-6">
-          <PersonalInfoCard
-            isEditing={isEditing}
-            formData={formData}
-            setFormData={setFormData}
-            profilePhoto={profilePhoto}
-            onPhotoUpload={handlePhotoUpload}
-            skillInput={skillInput}
-            setSkillInput={setSkillInput}
-            onAddSkill={addSkill}
-            onRemoveSkill={removeSkill}
-            errors={errors}
-            touched={touched}
-            onBlur={handleBlur}
-          />
+          <div className="space-y-6">
+            <PersonalInfoCard
+              isEditing={isEditing}
+              formData={formData}
+              setFormData={setFormData}
+              profilePhoto={profilePhoto}
+              onPhotoUpload={handlePhotoUpload}
+              skillInput={skillInput}
+              setSkillInput={setSkillInput}
+              onAddSkill={addSkill}
+              onRemoveSkill={removeSkill}
+              errors={errors}
+              touched={touched}
+              onBlur={handleBlur}
+            />
 
-          <ResumeCard
-            isEditing={isEditing}
-            resumeFile={resumeFile}
-            onResumeUpload={handleResumeUpload}
-            errors={errors}
-            touched={touched}
-          />
+            <ResumeCard
+              isEditing={isEditing}
+              resumeFile={resumeFile}
+              onResumeUpload={handleResumeUpload}
+              errors={errors}
+              touched={touched}
+            />
 
-          <WorkExperienceCard
-            isEditing={isEditing}
-            experiences={experiences}
-            setExperiences={setExperiences}
-          />
+            <WorkExperienceCard
+              isEditing={isEditing}
+              experiences={experiences}
+              setExperiences={setExperiences}
+            />
+
+            <EducationCard
+              isEditing={isEditing}
+              education={education}
+              setEducation={setEducation}
+            />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
