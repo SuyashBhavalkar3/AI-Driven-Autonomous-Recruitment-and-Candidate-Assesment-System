@@ -20,3 +20,8 @@ class Candidate(Base):
     education = relationship("Education", back_populates="candidate", cascade="all, delete")
     skills = relationship("Skill", back_populates="candidate", cascade="all, delete")
     projects = relationship("Project", back_populates="candidate", cascade="all, delete")
+    certifications = relationship("Certification", back_populates="candidate", cascade="all, delete")
+
+
+# re-export models defined in candidate_profile for convenience
+from candidate_profile.models import Experience, Education, Skill, Project, Certification

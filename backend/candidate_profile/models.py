@@ -56,3 +56,16 @@ class Project(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     candidate = relationship("Candidate", back_populates="projects")
+
+
+class Certification(Base):
+    __tablename__ = "certifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    candidate_id = Column(Integer, ForeignKey("candidates.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String(200), nullable=False)
+    issued_by = Column(String(200), nullable=True)
+    issue_date = Column(String(50), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    candidate = relationship("Candidate", back_populates="certifications")
