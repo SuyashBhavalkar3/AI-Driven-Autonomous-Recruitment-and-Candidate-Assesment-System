@@ -10,7 +10,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 logger = logging.getLogger(__name__)
 
 
-async def analyze_resume_match(parsed_resume: Dict[str, Any], job_description: Dict[str, Any]) -> Dict[str, Any]:
+def analyze_resume_match(parsed_resume: Dict[str, Any], job_description: Dict[str, Any]) -> Dict[str, Any]:
     """
     Analyze resume against job requirements using AI.
     Returns structured analysis with match_score (0-100).

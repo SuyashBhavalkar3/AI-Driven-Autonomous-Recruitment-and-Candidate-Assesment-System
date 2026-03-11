@@ -7,7 +7,7 @@ from authentication.models import User
 from applications.models import Application, ApplicationStatus
 from applications.schemas import ApplicationCreate, ApplicationResponse, ApplicationDetailResponse, ApplicationUpdate
 from applications.ai_service import analyze_resume_match
-from assessment.models import Assessment, AssessmentQuestion
+from assessment.models import Assessment, AssessmentQuestion, QuestionType
 from assessment.assessment_service import generate_assessment_questions
 from resume_parsing.models import Candidate
 from candidate_profile.models import Experience, Education, Skill, Project, Certification
@@ -118,7 +118,7 @@ async def apply_for_job(
     1. Create application record
     2. Analyze resume against job description
     3. Save resume_score and resume_analysis to database
-    4. If score >= threshold, generate and store MCQ questions
+    4. If score >= threshold, generate 10 MCQ + 2 DSA questions
     5. Update application status
     """
     
@@ -187,8 +187,8 @@ async def apply_for_job(
     if has_profile_data:
         try:
             logger.info(f"Starting resume analysis for application {new_application.id}")
-            # Call async function to analyze resume match using compiled resume data
-            analysis = await analyze_resume_match(resume_data, job_data)
+            # Call function to analyze resume match using compiled resume data
+            analysis = analyze_resume_match(resume_data, job_data)
             
             logger.info(f"Resume analysis completed. Match score: {analysis.get('match_score', 0)}")
             
@@ -236,14 +236,18 @@ async def apply_for_job(
         logger.info(f"Score {resume_score} >= threshold {RESUME_SCORE_THRESHOLD}. Generating assessment questions...")
         
         try:
-            # Generate assessment questions using compiled resume data
-            questions = await generate_assessment_questions(
+            # Generate both MCQ and DSA questions
+            questions_data = await generate_assessment_questions(
                 parsed_resume=resume_data,
                 job_data=job_data,
-                num_questions=8
+                num_mcq=10,  # 10 MCQ questions (4 marks each = 40 marks)
+                num_dsa=2   # 2 DSA questions (30 marks each = 60 marks)
             )
             
-            if questions and len(questions) > 0:
+            mcq_questions = questions_data.get("mcq_questions", [])
+            dsa_questions = questions_data.get("dsa_questions", [])
+            
+            if (len(mcq_questions) > 0 or len(dsa_questions) > 0):
                 # Create assessment record
                 assessment = Assessment(
                     application_id=new_application.id
@@ -251,10 +255,11 @@ async def apply_for_job(
                 db.add(assessment)
                 db.flush()  # Get the assessment ID
                 
-                # Store each question
-                for question_data in questions:
+                # Store MCQ questions
+                for question_data in mcq_questions:
                     question = AssessmentQuestion(
                         assessment_id=assessment.id,
+                        question_type=QuestionType.MCQ,
                         question_text=question_data.get('question_text'),
                         option_a=question_data.get('option_a'),
                         option_b=question_data.get('option_b'),
@@ -263,7 +268,26 @@ async def apply_for_job(
                         correct_option=question_data.get('correct_option'),
                         topic=question_data.get('topic'),
                         difficulty=question_data.get('difficulty'),
-                        explanation=question_data.get('explanation')
+                        explanation=question_data.get('explanation'),
+                        marks=4  # Each MCQ is worth 4 marks
+                    )
+                    db.add(question)
+                
+                # Store DSA questions
+                for question_data in dsa_questions:
+                    question = AssessmentQuestion(
+                        assessment_id=assessment.id,
+                        question_type=QuestionType.DSA,
+                        question_text=question_data.get('question_text'),
+                        topic=question_data.get('topic'),
+                        difficulty=question_data.get('difficulty'),
+                        example_input=question_data.get('example_input'),
+                        example_output=question_data.get('example_output'),
+                        test_cases=question_data.get('test_cases'),
+                        expected_time_complexity=question_data.get('expected_time_complexity'),
+                        expected_space_complexity=question_data.get('expected_space_complexity'),
+                        constraints=question_data.get('constraints'),
+                        marks=30  # Each DSA question is worth 30 marks
                     )
                     db.add(question)
                 
@@ -272,7 +296,7 @@ async def apply_for_job(
                 db.commit()
                 db.refresh(new_application)
                 
-                logger.info(f"Successfully generated {len(questions)} assessment questions for application {new_application.id}")
+                logger.info(f"Successfully generated {len(mcq_questions)} MCQ and {len(dsa_questions)} DSA questions for application {new_application.id}")
             else:
                 logger.warning(f"No questions generated for application {new_application.id}. Keeping RESUME_SCREENED status.")
                 

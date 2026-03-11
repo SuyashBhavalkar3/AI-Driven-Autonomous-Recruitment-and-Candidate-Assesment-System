@@ -4,16 +4,18 @@ from authentication.database import get_db
 from authentication.utils import get_current_user
 from authentication.models import User
 from applications.models import Application, ApplicationStatus
-from assessment.models import Assessment, AssessmentQuestion, AssessmentAnswer
+from assessment.models import Assessment, AssessmentQuestion, AssessmentAnswer, CodeSubmission, QuestionType
 from assessment.schemas import (
     AssessmentStartResponse,
-    AssessmentQuestionResponse,
+    MCQQuestionResponse,
+    DSAQuestionResponse,
     SubmitAssessmentRequest,
     AssessmentResultResponse,
     AssessmentFeedbackResponse,
-    AssessmentAnswerDetail
+    MCQAnswerDetail,
+    DSASubmissionDetail
 )
-from assessment.assessment_service import evaluate_assessment_answers
+from assessment.dsa_service import evaluate_dsa_submission
 from middleware.rate_limiter import rate_limiter
 from datetime import datetime
 import logging
@@ -32,8 +34,11 @@ async def start_assessment(
     """
     Start assessment for a candidate.
     
-    Returns pre-generated questions WITHOUT correct answers.
-    If assessment doesn't exist, returns 404.
+    Returns:
+    - 10 MCQ questions (4 marks each = 40 marks total)
+    - 2 DSA coding questions (30 marks each = 60 marks total)
+    
+    Correct answers are NOT included.
     """
     
     if current_user.is_employer:
@@ -67,14 +72,14 @@ async def start_assessment(
         assessment.started_at = datetime.utcnow()
         db.commit()
     
-    # Fetch questions without correct answers
-    questions_from_db = db.query(AssessmentQuestion).filter(
-        AssessmentQuestion.assessment_id == assessment.id
+    # Fetch MCQ questions
+    mcq_questions_db = db.query(AssessmentQuestion).filter(
+        AssessmentQuestion.assessment_id == assessment.id,
+        AssessmentQuestion.question_type == QuestionType.MCQ
     ).all()
     
-    # Convert to response schema (without correct_option)
-    questions_response = [
-        AssessmentQuestionResponse(
+    mcq_questions = [
+        MCQQuestionResponse(
             id=q.id,
             question_text=q.question_text,
             option_a=q.option_a,
@@ -82,15 +87,39 @@ async def start_assessment(
             option_c=q.option_c,
             option_d=q.option_d,
             topic=q.topic,
-            difficulty=q.difficulty
+            difficulty=q.difficulty,
+            marks=q.marks
         )
-        for q in questions_from_db
+        for q in mcq_questions_db
+    ]
+    
+    # Fetch DSA questions
+    dsa_questions_db = db.query(AssessmentQuestion).filter(
+        AssessmentQuestion.assessment_id == assessment.id,
+        AssessmentQuestion.question_type == QuestionType.DSA
+    ).all()
+    
+    dsa_questions = [
+        DSAQuestionResponse(
+            id=q.id,
+            question_text=q.question_text,
+            topic=q.topic,
+            difficulty=q.difficulty,
+            example_input=q.example_input,
+            example_output=q.example_output,
+            expected_time_complexity=q.expected_time_complexity,
+            expected_space_complexity=q.expected_space_complexity,
+            constraints=q.constraints,
+            marks=q.marks
+        )
+        for q in dsa_questions_db
     ]
     
     return AssessmentStartResponse(
         id=assessment.id,
         application_id=assessment.application_id,
-        questions=questions_response,
+        mcq_questions=mcq_questions,
+        dsa_questions=dsa_questions,
         started_at=assessment.started_at,
         completed=assessment.completed
     )
@@ -104,14 +133,13 @@ async def submit_assessment(
     db: Session = Depends(get_db)
 ):
     """
-    Submit assessment answers and calculate score.
+    Submit assessment answers and code.
     
     Workflow:
-    1. Validate application and assessment
-    2. Store answers
-    3. Evaluate against correct answers
-    4. Update assessment with score
-    5. Update application status
+    1. Evaluate MCQ answers (4 marks each)
+    2. Execute and evaluate DSA code (30 marks each)
+    3. Calculate total score (MCQ + DSA)
+    4. Update assessment and application
     """
     
     if current_user.is_employer:
@@ -137,63 +165,116 @@ async def submit_assessment(
     if assessment.completed:
         raise HTTPException(status_code=400, detail="Assessment already submitted")
     
-    # Store answers and calculate score
-    total_questions = db.query(AssessmentQuestion).filter(
-        AssessmentQuestion.assessment_id == assessment.id
-    ).count()
+    # ===== EVALUATE MCQ ANSWERS =====
+    mcq_correct = 0
+    total_mcq = len(submission.mcq_answers)
+    mcq_score = 0
     
-    correct_count = 0
-    
-    for answer_data in submission.answers:
+    for answer_data in submission.mcq_answers:
         question = db.query(AssessmentQuestion).filter(
             AssessmentQuestion.id == answer_data.question_id,
-            AssessmentQuestion.assessment_id == assessment.id
+            AssessmentQuestion.assessment_id == assessment.id,
+            AssessmentQuestion.question_type == QuestionType.MCQ
         ).first()
         
         if not question:
-            raise HTTPException(status_code=400, detail=f"Question {answer_data.question_id} not found in this assessment")
+            raise HTTPException(status_code=400, detail=f"MCQ question {answer_data.question_id} not found")
         
         # Check if answer is correct
         is_correct = answer_data.selected_option == question.correct_option
+        marks_obtained = 4 if is_correct else 0
+        
         if is_correct:
-            correct_count += 1
+            mcq_correct += 1
+            mcq_score += 4
         
         # Store the answer
         answer_record = AssessmentAnswer(
             assessment_id=assessment.id,
             question_id=answer_data.question_id,
             selected_option=answer_data.selected_option,
-            is_correct=is_correct
+            is_correct=is_correct,
+            marks_obtained=marks_obtained
         )
         db.add(answer_record)
     
-    # Calculate score (e.g., 10 points per correct answer for 10 questions)
-    points_per_question = 100 / total_questions if total_questions > 0 else 0
-    score = int(correct_count * points_per_question)
-    percentage = (correct_count / total_questions * 100) if total_questions > 0 else 0
+    logger.info(f"MCQ evaluation: {mcq_correct}/{total_mcq} correct, Score: {mcq_score}/40")
+    
+    # ===== EVALUATE DSA CODE SUBMISSIONS =====
+    dsa_score = 0
+    total_dsa_test_cases = 0
+    dsa_test_cases_passed = 0
+    
+    for code_data in submission.dsa_submissions:
+        question = db.query(AssessmentQuestion).filter(
+            AssessmentQuestion.id == code_data.question_id,
+            AssessmentQuestion.assessment_id == assessment.id,
+            AssessmentQuestion.question_type == QuestionType.DSA
+        ).first()
+        
+        if not question:
+            raise HTTPException(status_code=400, detail=f"DSA question {code_data.question_id} not found")
+        
+        # Execute and evaluate code
+        test_cases = question.test_cases or []
+        evaluation = await evaluate_dsa_submission(
+            code=code_data.code,
+            language=code_data.language,
+            test_cases=test_cases,
+            expected_time_complexity=question.expected_time_complexity
+        )
+        
+        marks_obtained = evaluation["marks_obtained"]
+        dsa_score += marks_obtained
+        
+        total_dsa_test_cases += evaluation["total_test_cases"]
+        dsa_test_cases_passed += evaluation["test_cases_passed"]
+        
+        # Store code submission
+        code_submission = CodeSubmission(
+            assessment_id=assessment.id,
+            question_id=code_data.question_id,
+            code=code_data.code,
+            language=code_data.language,
+            test_cases_passed=evaluation["test_cases_passed"],
+            total_test_cases=evaluation["total_test_cases"],
+            marks_obtained=marks_obtained,
+            is_correct=evaluation["is_correct"],
+            evaluation_feedback=evaluation["feedback"]
+        )
+        db.add(code_submission)
+    
+    logger.info(f"DSA evaluation: {dsa_test_cases_passed}/{total_dsa_test_cases} test cases passed, Score: {dsa_score}/60")
+    
+    # ===== CALCULATE TOTAL SCORE =====
+    total_score = mcq_score + dsa_score
     
     # Update assessment
-    assessment.score = score
+    assessment.mcq_score = mcq_score
+    assessment.dsa_score = dsa_score
+    assessment.total_score = total_score
     assessment.completed = True
     assessment.completed_at = datetime.utcnow()
     
     # Update application
-    application.assessment_score = score
+    application.assessment_score = total_score
     application.status = ApplicationStatus.ASSESSMENT_COMPLETED
     
     db.commit()
     db.refresh(assessment)
     
-    logger.info(f"Assessment {assessment.id} submitted. Score: {score}/{100}, Percentage: {percentage:.2f}%")
+    logger.info(f"Assessment {assessment.id} completed. MCQ: {mcq_score}/40, DSA: {dsa_score}/60, Total: {total_score}/100")
     
     return AssessmentResultResponse(
         id=assessment.id,
         application_id=assessment.application_id,
-        score=score,
-        total_questions=total_questions,
-        percentage=round(percentage, 2),
-        questions_answered=len(submission.answers),
-        correct_answers=correct_count,
+        mcq_score=mcq_score,
+        dsa_score=dsa_score,
+        total_score=total_score,
+        mcq_correct=mcq_correct,
+        total_mcq=total_mcq,
+        dsa_test_cases_passed=dsa_test_cases_passed,
+        total_dsa_test_cases=total_dsa_test_cases,
         completed_at=assessment.completed_at
     )
 
@@ -207,8 +288,10 @@ async def get_assessment_result(
     """
     Get detailed assessment results and feedback.
     
-    Returns score, percentage, correctness of each answer, and overall pass/fail.
-    Only available after assessment is completed.
+    Returns:
+    - MCQ answers with correct/incorrect status
+    - DSA submissions with test case results
+    - Overall score breakdown
     """
     
     if current_user.is_employer:
@@ -234,35 +317,54 @@ async def get_assessment_result(
     if not assessment.completed:
         raise HTTPException(status_code=400, detail="Assessment not yet completed")
     
-    # Get all answers with their questions
-    answers = db.query(AssessmentAnswer).filter(
+    # Get MCQ answers
+    mcq_answers_db = db.query(AssessmentAnswer).filter(
         AssessmentAnswer.assessment_id == assessment.id
     ).all()
     
-    answer_details = []
-    for answer in answers:
+    mcq_answers = []
+    for answer in mcq_answers_db:
         question = answer.question
-        answer_details.append(
-            AssessmentAnswerDetail(
+        mcq_answers.append(
+            MCQAnswerDetail(
                 question_id=answer.question_id,
                 question_text=question.question_text,
                 selected_option=answer.selected_option,
                 correct_option=question.correct_option,
-                is_correct=answer.is_correct
+                is_correct=answer.is_correct,
+                marks_obtained=answer.marks_obtained or 0
             )
         )
     
-    # Calculate metrics
-    total_questions = len(answer_details)
-    correct_count = sum(1 for a in answer_details if a.is_correct)
-    percentage = (correct_count / total_questions * 100) if total_questions > 0 else 0
-    passed = percentage >= 60  # 60% threshold
+    # Get DSA submissions
+    dsa_submissions_db = db.query(CodeSubmission).filter(
+        CodeSubmission.assessment_id == assessment.id
+    ).all()
+    
+    dsa_submissions = []
+    for submission in dsa_submissions_db:
+        question = submission.question
+        dsa_submissions.append(
+            DSASubmissionDetail(
+                question_id=submission.question_id,
+                question_text=question.question_text,
+                code=submission.code,
+                language=submission.language,
+                test_cases_passed=submission.test_cases_passed or 0,
+                total_test_cases=submission.total_test_cases or 0,
+                marks_obtained=submission.marks_obtained or 0,
+                execution_feedback=submission.evaluation_feedback
+            )
+        )
+    
+    # Calculate pass/fail (60% threshold = 60/100)
+    passed = assessment.total_score >= 60
     
     return AssessmentFeedbackResponse(
-        score=assessment.score or 0,
-        total_questions=total_questions,
-        percentage=round(percentage, 2),
+        mcq_score=assessment.mcq_score or 0,
+        dsa_score=assessment.dsa_score or 0,
+        total_score=assessment.total_score or 0,
         passed=passed,
-        answers=answer_details
+        mcq_answers=mcq_answers,
+        dsa_submissions=dsa_submissions
     )
-
