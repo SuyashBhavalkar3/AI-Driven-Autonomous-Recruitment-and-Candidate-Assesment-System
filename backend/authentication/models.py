@@ -19,3 +19,4 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     resumes = relationship("Candidate", back_populates="user", cascade="all, delete")
+    jobs = relationship("Job", back_populates="employer", cascade="all, delete")

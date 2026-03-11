@@ -38,9 +38,12 @@ class Skill(Base):
     __tablename__ = "skills"
 
     id = Column(Integer, primary_key=True, index=True)
-    candidate_id = Column(Integer, ForeignKey("candidates.id", ondelete="CASCADE"), nullable=False)
-    skill_name = Column(String(100), nullable=False)
-    proficiency = Column(String(50), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+    candidate_id = Column(Integer, ForeignKey("candidates.id"), nullable=False)
+    languages = Column(String)
+    backend_technologies = Column(String)
+    databases = Column(String)
+    ai_ml_frameworks = Column(String)
+    tools_platforms = Column(String)
+    core_competencies = Column(String)
+
     candidate = relationship("Candidate", back_populates="skills")

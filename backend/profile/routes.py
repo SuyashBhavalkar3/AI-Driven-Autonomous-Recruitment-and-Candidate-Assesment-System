@@ -65,7 +65,7 @@ def get_hr_profile(
         "id": current_user.id,
         "name": current_user.name,
         "email": current_user.email,
-        "company": current_user.company,
+        "company": current_user.company_name,
         "created_at": current_user.created_at
     }
 

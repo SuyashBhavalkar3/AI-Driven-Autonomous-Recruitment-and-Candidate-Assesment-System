@@ -14,16 +14,19 @@ Structure:
 "education": {{
     "degree": "",
     "institution": "",
-    "graduation_date": "",
-    "location": ""
+    "field_of_study": "",
+    "start_date": "",
+    "end_date": "",
+    "grade": "",
 }},
 "experience": {{
     "company_name": "",
-    "title": "",
+    "job_title": "",
     "start_date": "",
     "end_date": "",
     "location": "",
-    "responsibilities": ""
+    "in_current": "",this field should be in boolean format (true/false)
+    "description": ""
 }},
 "skills": {{
     "languages": "",
