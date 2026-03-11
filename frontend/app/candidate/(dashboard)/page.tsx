@@ -27,6 +27,7 @@ import { getUserData, getAuthToken } from "@/lib/auth";
 import { getCurrentUser } from "@/lib/api";
 import { ProfileCompletionCard } from "@/components/ProfileCompletionCard";
 import { calculateProfileCompletion } from "@/lib/profileCompletion";
+import { useProfileStatus } from "@/hooks/useProfileStatus";
 
 // Mock API functions – replace with actual endpoints
 const fetchDashboardStats = async () => {
@@ -63,6 +64,7 @@ export default function CandidateDashboard() {
   const statsRef = useRef<HTMLDivElement>(null);
   const jobsRef = useRef<HTMLDivElement>(null);
   const [particles, setParticles] = useState<React.ReactNode[]>([]);
+  const { profileStatus, loading: profileLoading } = useProfileStatus();
 
   // Load user data from auth
   useEffect(() => {
@@ -155,18 +157,6 @@ export default function CandidateDashboard() {
     }
   }, [loading]);
 
-  // Profile completion calculation
-  const profileStatus = calculateProfileCompletion({
-    fullName: userData?.full_name || "",
-    email: userData?.email || "",
-    phone: "",
-    location: "",
-    bio: "",
-    skills: [],
-    resume: "",
-    experiences: [],
-  });
-
   if (loading) {
     return (
       <div className="relative min-h-screen flex items-center justify-center">
@@ -232,14 +222,32 @@ export default function CandidateDashboard() {
       </div>
 
       {/* Profile completion card */}
-      {!profileStatus.isComplete && (
+      {!profileLoading && profileStatus && !profileStatus.profile_completed && (
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.3 }}
           className="mb-6"
         >
-          <ProfileCompletionCard status={profileStatus} showDetails={true} />
+          <Card className="border-orange-200 bg-orange-50 dark:bg-orange-900/20">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-orange-800 dark:text-orange-200">
+                    Complete Your Profile
+                  </h3>
+                  <p className="text-orange-600 dark:text-orange-300 mt-1">
+                    Complete your profile to start applying for jobs
+                  </p>
+                </div>
+                <Link href="/complete-profile">
+                  <Button className="bg-orange-500 hover:bg-orange-600">
+                    Complete Profile
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
         </motion.div>
       )}
 

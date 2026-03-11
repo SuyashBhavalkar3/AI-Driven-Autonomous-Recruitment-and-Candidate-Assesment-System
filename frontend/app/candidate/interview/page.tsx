@@ -1,9 +1,10 @@
 "use client";
 
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import DynamicInterviewLayout from "@/components/interview/DynamicInterviewLayout";
 
-export default function InterviewPage() {
+function InterviewContent() {
   const searchParams = useSearchParams();
   const applicationId = searchParams.get("applicationId") || "test";
   const company = searchParams.get("company") || "Tech Company";
@@ -15,5 +16,13 @@ export default function InterviewPage() {
       company={company}
       position={position}
     />
+  );
+}
+
+export default function InterviewPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading interview...</div>}>
+      <InterviewContent />
+    </Suspense>
   );
 }

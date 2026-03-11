@@ -120,7 +120,7 @@ export default function JobsPage() {
                       <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
                         {job.title}
                       </h3>
-                      <Badge className={statusColors[job.status]}>
+                      <Badge className={statusColors[job.status as keyof typeof statusColors]}>
                         {job.status}
                       </Badge>
                     </div>

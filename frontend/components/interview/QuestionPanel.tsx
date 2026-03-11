@@ -4,10 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { Repeat, Send } from "lucide-react";
 import OralQuestion from "./OralQuestion";
 import CodingQuestion from "./CodingQuestion";
-import type { Question } from "./StartScreen"; // Fix import path
+import type { Section } from "./StartScreen";
 
 interface QuestionPanelProps {
-  question: Question;
+  question: Section;
   answer: string;
   setAnswer: (value: string) => void;
   onNext: () => void;

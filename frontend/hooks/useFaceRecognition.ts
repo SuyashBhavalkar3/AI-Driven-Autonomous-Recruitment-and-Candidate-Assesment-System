@@ -9,7 +9,7 @@ export function useFaceRecognition({ videoRef }: UseFaceRecognitionProps) {
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [referenceDescriptor, setReferenceDescriptor] = useState<Float32Array | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const faceCheckInterval = useRef<NodeJS.Timeout>();
+  const faceCheckInterval = useRef<NodeJS.Timeout | null>(null);
 
   // Load models
   useEffect(() => {

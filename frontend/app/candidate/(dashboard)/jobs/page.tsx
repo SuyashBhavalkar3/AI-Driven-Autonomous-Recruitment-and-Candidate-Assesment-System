@@ -34,21 +34,12 @@ import {
   Sparkles,
 } from "lucide-react";
 import { calculateProfileCompletion, UserProfile } from "@/lib/profileCompletion";
+import { useProfileStatus } from "@/hooks/useProfileStatus";
+import { enforceProfileCompletion } from "@/lib/profileEnforcement";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import gsap from "gsap";
 
-// Mock user profile - replace with actual data from backend
-const mockUserProfile: UserProfile = {
-  fullName: "John Doe",
-  email: "john@example.com",
-  phone: "",
-  location: "",
-  bio: "",
-  skills: [],
-  resume: "",
-  experiences: [],
-};
 
 const jobs = [
   {
@@ -113,9 +104,8 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(true);
   const [particles, setParticles] = useState<React.ReactNode[]>([]);
   const cardsRef = useRef<HTMLDivElement>(null);
+  const { profileStatus, loading: profileLoading } = useProfileStatus();
 
-  // Check profile completion
-  const profileStatus = calculateProfileCompletion(mockUserProfile);
 
   // Simulate loading
   useEffect(() => {
@@ -162,15 +152,6 @@ export default function JobsPage() {
     }
   }, [loading]);
 
-  // Auto-redirect to profile if incomplete after 3 seconds
-  useEffect(() => {
-    if (!profileStatus.isComplete && selectedJob) {
-      const timer = setTimeout(() => {
-        router.push("/candidate/profile");
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [profileStatus.isComplete, selectedJob, router]);
 
   const filteredJobs = jobs.filter((job) => {
     return (
@@ -181,8 +162,9 @@ export default function JobsPage() {
     );
   });
 
-  const handleApply = (job: typeof jobs[0]) => {
-    if (!profileStatus.isComplete) {
+  const handleApply = async (job: typeof jobs[0]) => {
+    const canApply = await enforceProfileCompletion();
+    if (!canApply) {
       return;
     }
     setSelectedJob(job);
@@ -380,7 +362,7 @@ export default function JobsPage() {
 
           <AnimatePresence mode="wait">
             {/* Profile Incomplete Warning */}
-            {!profileStatus.isComplete && (
+            {!profileLoading && profileStatus && !profileStatus.profile_completed && (
               <motion.div
                 key="incomplete"
                 initial={{ opacity: 0 }}
@@ -396,24 +378,13 @@ export default function JobsPage() {
                         Complete Your Profile First
                       </h4>
                       <p className="text-sm text-amber-800 mb-3">
-                        You need to complete your profile (100%) before applying for
-                        jobs. Redirecting to profile page in 3 seconds...
+                        You need to complete your profile before applying for jobs.
                       </p>
-                      <div className="space-y-1 mb-3">
-                        <p className="text-sm font-medium text-amber-900">
-                          Missing:
-                        </p>
-                        <ul className="text-sm text-amber-800 list-disc list-inside">
-                          {profileStatus.missingFields.map((field) => (
-                            <li key={field}>{field}</li>
-                          ))}
-                        </ul>
-                      </div>
                     </div>
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Link href="/candidate/profile" className="flex-1">
+                  <Link href="/complete-profile" className="flex-1">
                     <Button className="w-full bg-[#B8915C] hover:bg-[#9F7A4F]">
                       Complete Profile
                     </Button>
@@ -429,7 +400,7 @@ export default function JobsPage() {
               </motion.div>
             )}
 
-            {profileStatus.isComplete && applicationStatus === "idle" && (
+            {!profileLoading && profileStatus && profileStatus.profile_completed && applicationStatus === "idle" && (
               <motion.div
                 key="form"
                 initial={{ opacity: 0 }}
@@ -462,7 +433,7 @@ export default function JobsPage() {
               </motion.div>
             )}
 
-            {profileStatus.isComplete && applicationStatus === "applying" && (
+            {!profileLoading && profileStatus && profileStatus.profile_completed && applicationStatus === "applying" && (
               <motion.div
                 key="applying"
                 initial={{ opacity: 0 }}
@@ -488,7 +459,7 @@ export default function JobsPage() {
               </motion.div>
             )}
 
-            {profileStatus.isComplete && applicationStatus === "success" && (
+            {!profileLoading && profileStatus && profileStatus.profile_completed && applicationStatus === "success" && (
               <motion.div
                 key="success"
                 initial={{ opacity: 0 }}
@@ -516,7 +487,7 @@ export default function JobsPage() {
               </motion.div>
             )}
 
-            {profileStatus.isComplete && applicationStatus === "rejected" && (
+            {!profileLoading && profileStatus && profileStatus.profile_completed && applicationStatus === "rejected" && (
               <motion.div
                 key="rejected"
                 initial={{ opacity: 0 }}

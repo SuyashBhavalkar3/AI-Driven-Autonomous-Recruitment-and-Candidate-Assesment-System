@@ -1,11 +1,14 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Camera, AlertTriangle } from "lucide-react";
+
 export interface Section {
   name: string;
   type: string;
   duration: number;
   content?: string;
+  question?: string;
+  starterCode?: string;
 }
 
 interface StartScreenProps {

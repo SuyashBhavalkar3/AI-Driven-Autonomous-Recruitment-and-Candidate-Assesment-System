@@ -24,13 +24,17 @@ def extract_text(file_stream, filename: str):
     extension = filename.split(".")[-1].lower()
 
     if extension == "pdf":
-        # example using pdfminer
+        # Extract text from PDF
         from pdfminer.high_level import extract_text
         text = extract_text(file_stream)
 
     elif extension in ["doc", "docx"]:
-        # handle word file
-        text = "doc parsing logic"
+        # Extract text from Word document
+        try:
+            doc = Document(file_stream)
+            text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
+        except Exception as e:
+            raise ValueError(f"Failed to parse Word document: {str(e)}")
 
     else:
         raise ValueError("Unsupported file format")

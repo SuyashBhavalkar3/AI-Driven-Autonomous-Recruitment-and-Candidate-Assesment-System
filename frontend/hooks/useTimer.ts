@@ -8,7 +8,7 @@ interface UseTimerProps {
 
 export function useTimer({ initialTime, active, onExpire }: UseTimerProps) {
   const [timeLeft, setTimeLeft] = useState(initialTime);
-  const timerRef = useRef<NodeJS.Timeout>();
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const resetTimer = (newTime: number) => {
     setTimeLeft(newTime);
@@ -36,7 +36,7 @@ export function useTimer({ initialTime, active, onExpire }: UseTimerProps) {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [active, timeLeft, onExpire]); // <- missing brace was here? Actually the code above is complete.
+  }, [active, timeLeft, onExpire]);
 
   return { timeLeft, resetTimer };
 }

@@ -1,99 +1,97 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from authentication.database import get_db
 from authentication.utils import get_current_user
 from authentication.models import User
 from resume_parsing.models import Candidate
-from resume_parsing.schemas import CandidateProfileResponse, CandidateProfileUpdate
-from middleware.rate_limiter import rate_limiter
+from candidate_profile.schemas import CandidateProfileComplete
+from candidate_profile.models import Experience, Education, Skill, Project
+from resume_parsing.utils import parse_resume
+import io
 
-router = APIRouter(prefix="/v1/profile", tags=["Profile"], dependencies=[Depends(rate_limiter)])
+router = APIRouter(prefix="/api/profile", tags=["Profile"])
 
-
-@router.get("/candidate", response_model=CandidateProfileResponse)
-def get_candidate_profile(
+@router.post("/parse")
+async def parse_resume_for_profile(
+    file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get candidate profile"""
-    
     if current_user.is_employer:
-        raise HTTPException(status_code=403, detail="Employers cannot access candidate profiles")
+        raise HTTPException(status_code=403, detail="Only candidates can access this endpoint")
+    
+    if file.content_type not in [
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ]:
+        raise HTTPException(status_code=400, detail="Only PDF and Word documents are allowed")
+    
+    try:
+        file_bytes = await file.read()
+        parsed_data = parse_resume(io.BytesIO(file_bytes), file.filename)
+        return parsed_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Resume parsing failed: {str(e)}")
+
+@router.get("/status")
+def get_profile_status(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.is_employer:
+        raise HTTPException(status_code=403, detail="Only candidates can access this endpoint")
     
     candidate = db.query(Candidate).filter(Candidate.user_id == current_user.id).first()
-    if not candidate:
-        raise HTTPException(status_code=404, detail="Profile not found. Please upload your resume first.")
     
-    return candidate
+    if not candidate:
+        return {"profile_completed": False}
+    
+    return {"profile_completed": candidate.profile_completed}
 
-
-@router.put("/candidate", response_model=CandidateProfileResponse)
-def update_candidate_profile(
-    profile_update: CandidateProfileUpdate,
+@router.post("/save")
+def save_profile(
+    profile_data: CandidateProfileComplete,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Update candidate profile"""
-    
     if current_user.is_employer:
-        raise HTTPException(status_code=403, detail="Employers cannot update candidate profiles")
+        raise HTTPException(status_code=403, detail="Only candidates can access this endpoint")
     
     candidate = db.query(Candidate).filter(Candidate.user_id == current_user.id).first()
+    
+    # Create candidate record if it doesn't exist
     if not candidate:
-        raise HTTPException(status_code=404, detail="Profile not found. Please upload your resume first.")
+        candidate = Candidate(
+            user_id=current_user.id,
+            linkedin_url="",
+            resume_url=""
+        )
+        db.add(candidate)
+        db.flush()  # Ensure candidate.id is populated before adding related records
     
-    for key, value in profile_update.dict(exclude_unset=True).items():
-        setattr(candidate, key, value)
+    # Clear existing data
+    db.query(Experience).filter(Experience.candidate_id == candidate.id).delete()
+    db.query(Education).filter(Education.candidate_id == candidate.id).delete()
+    db.query(Skill).filter(Skill.candidate_id == candidate.id).delete()
+    db.query(Project).filter(Project.candidate_id == candidate.id).delete()
     
-    db.commit()
-    db.refresh(candidate)
+    # Add new experiences
+    for exp_data in profile_data.experiences:
+        experience = Experience(candidate_id=candidate.id, **exp_data.dict())
+        db.add(experience)
     
-    return candidate
-
-
-@router.get("/hr")
-def get_hr_profile(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get HR profile"""
+    # Add new education
+    for edu_data in profile_data.education:
+        education = Education(candidate_id=candidate.id, **edu_data.dict())
+        db.add(education)
     
-    if not current_user.is_employer:
-        raise HTTPException(status_code=403, detail="Only employers can access this endpoint")
+    # Add new skills
+    for skill_data in profile_data.skills:
+        skill = Skill(candidate_id=candidate.id, **skill_data.dict())
+        db.add(skill)
     
-    return {
-        "id": current_user.id,
-        "name": current_user.name,
-        "email": current_user.email,
-        "company": current_user.company_name,
-        "created_at": current_user.created_at
-    }
-
-
-@router.put("/hr")
-def update_hr_profile(
-    name: str = None,
-    company: str = None,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Update HR profile"""
-    
-    if not current_user.is_employer:
-        raise HTTPException(status_code=403, detail="Only employers can update HR profiles")
-    
-    if name:
-        current_user.name = name
-    if company:
-        current_user.company_name = company
+    # Mark profile as completed
+    candidate.profile_completed = True
+    current_user.profile_completed = True
     
     db.commit()
-    db.refresh(current_user)
     
-    return {
-        "id": current_user.id,
-        "name": current_user.name,
-        "email": current_user.email,
-        "company": current_user.company_name,
-        "created_at": current_user.created_at
-    }
+    return {"message": "Profile saved successfully", "profile_completed": True}

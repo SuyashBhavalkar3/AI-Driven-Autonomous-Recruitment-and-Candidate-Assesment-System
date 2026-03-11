@@ -91,16 +91,60 @@ export async function getCurrentUser(token: string): Promise<UserData> {
   return response.json();
 }
 
-const getAuthHeaders = () => {
+const getAuthHeaders = (): Record<string, string> => {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
   if (typeof window !== 'undefined') {
     const Cookies = require('js-cookie');
     const token = Cookies.default.get('auth_token');
-    return {
-      'Authorization': token ? `Bearer ${token}` : '',
-      'Content-Type': 'application/json',
-    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
   }
-  return { 'Content-Type': 'application/json' };
+
+  return headers;
+};
+
+// Profile API
+export const profileAPI = {
+  getStatus: async () => {
+    const res = await fetch(`${API_BASE_URL}/api/profile/status`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to fetch profile status');
+    return res.json();
+  },
+
+  saveProfile: async (profileData: any) => {
+    const res = await fetch(`${API_BASE_URL}/api/profile/save`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(profileData),
+    });
+    if (!res.ok) throw new Error('Failed to save profile');
+    return res.json();
+  },
+
+  parseResume: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const token = typeof window !== 'undefined' 
+      ? document.cookie.split('; ').find(row => row.startsWith('auth_token='))?.split('=')[1]
+      : null;
+    
+    const res = await fetch(`${API_BASE_URL}/api/resume/parse`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      },
+      body: formData,
+    });
+    if (!res.ok) throw new Error('Failed to parse resume');
+    return res.json();
+  },
 };
 
 // Dashboard API

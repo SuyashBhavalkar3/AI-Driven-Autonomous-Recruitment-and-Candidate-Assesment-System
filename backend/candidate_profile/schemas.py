@@ -55,6 +55,30 @@ class SkillResponse(SkillCreate):
     class Config:
         from_attributes = True
 
+class ProjectCreate(BaseModel):
+    project_name: str = Field(..., min_length=2, max_length=200)
+    description: Optional[str] = None
+    github_url: Optional[str] = Field(None, max_length=500)
+
+class ProjectResponse(ProjectCreate):
+    id: int
+    candidate_id: int
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+class CertificationCreate(BaseModel):
+    title: str = Field(..., min_length=2, max_length=200)
+
+class CertificationResponse(CertificationCreate):
+    id: int
+    candidate_id: int
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
 class CandidateProfileComplete(BaseModel):
     experiences: List[ExperienceCreate]
     education: List[EducationCreate]

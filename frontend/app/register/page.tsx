@@ -3,190 +3,131 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import Link from "next/link";
-import { useState, useCallback, useEffect } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { 
-  ArrowRight, 
-  Mail, 
-  Lock, 
-  User, 
-  Building,
-  ChevronRight,
-  Loader2,
-  AlertCircle
-} from "lucide-react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Mail, Lock, ArrowRight, Loader2, AlertCircle, User, Building } from "lucide-react";
 import { registerUser, loginUser } from "@/lib/api";
+import { getCurrentUser } from "@/lib/api";
 import { setAuthToken, setUserRole, setUserData } from "@/lib/auth";
 
-// Define validation schema with Zod
-const formSchema = z
-  .object({
-    fullName: z.string().min(2, "Full name must be at least 2 characters"),
-    email: z.string().email("Invalid email address"),
-    password: z.string().min(8, "Password must be at least 8 characters"),
-    role: z.enum(["candidate", "hr"], { message: "Please select your role" }),
-    company: z.string().optional(),
-  })
-  .refine(
-    (data) => {
-      if (data.role === "hr" && !data.company) {
-        return false;
-      }
-      return true;
-    },
-    {
-      message: "Company name is required for recruiters",
-      path: ["company"],
-    }
-  );
-
-type FormData = z.infer<typeof formSchema>;
-
 export default function RegisterPage() {
-  const searchParams = useSearchParams();
   const router = useRouter();
-  const roleFromUrl = searchParams.get('role') as 'candidate' | 'hr' | null;
-  
+  const [isLoading, setIsLoading] = useState(false);
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isEmployer, setIsEmployer] = useState(false);
+  const [company, setCompany] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [currentStep, setCurrentStep] = useState(1);
-  const totalSteps = 2;
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const {
-    register,
-    control,
-    handleSubmit,
-    watch,
-    formState: { errors },
-  } = useForm<FormData>({
-    resolver: zodResolver(formSchema),
-    mode: "onChange",
-    defaultValues: {
-      fullName: "",
-      email: "",
-      password: "",
-      role: "" as any,
-      company: "",
-    },
-  });
-
-  const selectedRole = watch("role");
-  const formValues = watch();
-
-  // Check if current step is valid
-  const isStepValid = () => {
-    switch(currentStep) {
-      case 1:
-        return formValues.fullName && formValues.email && formValues.password;
-      case 2:
-        // Force explicit role selection - cannot proceed without selecting
-        if (!formValues.role) {
-          return false;
-        }
-        if (formValues.role === "hr") {
-          return formValues.company && formValues.company.trim() !== "";
-        }
-        return true;
-      default:
-        return false;
-    }
-  };
-
-  const nextStep = () => {
-    if (currentStep < totalSteps && isStepValid()) {
-      setCurrentStep(currentStep + 1);
-    }
-  };
-
-  const prevStep = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
-    }
-  };
-
-  const onSubmit = async (data: FormData) => {
-    setIsSubmitting(true);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setError(null);
-    
+
+    if (!fullName || !email || !password || !confirmPassword) {
+      setError("Please fill in all fields");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters");
+      return;
+    }
+
+    if (isEmployer && !company) {
+      setError("Company name is required for employers");
+      return;
+    }
+
+    setIsLoading(true);
+
     try {
-      const isEmployer = data.role === "hr";
-      
-      // Register user
       const userData = await registerUser({
-        fullName: data.fullName,
-        email: data.email,
-        password: data.password,
+        fullName,
+        email,
+        password,
         is_employer: isEmployer,
-        company: data.company,
+        company: company || undefined
       });
 
       // Auto-login after registration
-      const authResponse = await loginUser({
-        email: data.email,
-        password: data.password,
-      });
+      const authResponse = await loginUser({ email, password });
+      const { access_token } = authResponse;
 
-      // Store auth data
-      setAuthToken(authResponse.access_token);
-      setUserRole(data.role);
-      setUserData(userData);
+      setAuthToken(access_token);
 
-      // Redirect to appropriate dashboard
-      router.push(data.role === 'hr' ? '/hr' : '/candidate');
+      // Fetch user data
+      const currentUserData = await getCurrentUser(access_token);
+      const userRole = currentUserData.is_employer ? "hr" : "candidate";
+      
+      setUserRole(userRole);
+      setUserData(currentUserData);
+
+      router.push(userRole === "hr" ? "/hr" : "/candidate");
     } catch (err: any) {
-      setError(err.message || 'Registration failed. Please try again.');
-      setIsSubmitting(false);
+      setError(err.message || "Registration failed. Please try again.");
+      setIsLoading(false);
     }
+  };
+
+  // Animation variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: { staggerChildren: 0.1, delayChildren: 0.2 },
+    },
+  };
+  const itemVariants = {
+    hidden: { y: 20, opacity: 0 },
+    visible: {
+      y: 0,
+      opacity: 1,
+      transition: { type: "spring" as const, stiffness: 300, damping: 24 },
+    },
   };
 
   return (
     <div className="relative min-h-screen flex items-center justify-center p-4 overflow-hidden bg-[#F9F6F0]">
-      {/* Artistic background – organic shapes with noise texture */}
+      {/* Artistic background */}
       <div className="absolute inset-0 opacity-30">
         <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-[#E6D7C3] rounded-full mix-blend-multiply filter blur-3xl animate-blob" />
         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#D9C5B3] rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-2000" />
         <div className="absolute bottom-0 left-20 w-[500px] h-[500px] bg-[#C7B5A0] rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-4000" />
       </div>
-
-      {/* Subtle paper texture overlay */}
       <div className="absolute inset-0 bg-[url('/noise.png')] opacity-5 pointer-events-none" />
 
-      {/* Main card – refined glassmorphism */}
+      {/* Main card */}
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 rounded-3xl overflow-hidden backdrop-blur-xl bg-white/40 border border-white/50 shadow-2xl"
+        className="relative w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 rounded-3xl overflow-hidden backdrop-blur-xl bg-white/40 border border-white/50 shadow-2xl"
       >
         {/* Left side – artistic branding */}
         <div className="relative hidden lg:flex flex-col justify-center p-12 bg-gradient-to-br from-[#F1E9E0]/80 to-[#E5D9CF]/80 backdrop-blur-sm">
-          {/* Abstract ink-like shapes */}
           <div className="absolute inset-0 opacity-20">
-            <svg className="absolute top-10 left-10 w-64 h-64" viewBox="0 0 200 200" fill="none">
+            <svg className="absolute top-8 left-8 w-48 h-48" viewBox="0 0 200 200" fill="none">
               <path d="M50 100C50 70 70 50 100 50C130 50 150 70 150 100C150 130 130 150 100 150C70 150 50 130 50 100Z" fill="#B8915C" />
               <circle cx="120" cy="80" r="40" fill="#C17C5A" />
             </svg>
           </div>
-
           <div className="relative z-10">
             <motion.h1
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2, duration: 0.8 }}
-              className="font-serif text-4xl font-medium tracking-tight text-[#2D2A24] mb-2"
+              className="font-serif text-4xl font-medium tracking-tight text-[#2D2A24] mb-3"
             >
               HireFlow
             </motion.h1>
@@ -194,57 +135,21 @@ export default function RegisterPage() {
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3, duration: 0.8 }}
-              className="text-lg text-[#4A443C] leading-relaxed max-w-sm"
+              className="text-base text-[#4A443C] leading-relaxed max-w-sm"
             >
-              Join the future of hiring.
+              Where talent meets opportunity —<br /> thoughtfully, intelligently.
             </motion.p>
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.5, duration: 1 }}
-              className="mt-8 h-px w-16 bg-[#B8915C]/40"
+              className="mt-8 h-px w-12 bg-[#B8915C]/40"
             />
           </div>
-
-          {/* Step indicator with artistic flair */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6 }}
-            className="mt-12 space-y-4"
-          >
-            <div className="flex items-center gap-3">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
-                currentStep >= 1 ? 'bg-[#B8915C] text-white' : 'bg-white/60 text-[#5A534A] border border-[#D6CDC2]'
-              }`}>
-                1
-              </div>
-              <div>
-                <p className={`text-sm font-medium ${currentStep >= 1 ? 'text-[#2D2A24]' : 'text-[#5A534A]'}`}>
-                  Account details
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-3">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
-                currentStep >= 2 ? 'bg-[#B8915C] text-white' : 'bg-white/60 text-[#5A534A] border border-[#D6CDC2]'
-              }`}>
-                2
-              </div>
-              <div>
-                <p className={`text-sm font-medium ${currentStep >= 2 ? 'text-[#2D2A24]' : 'text-[#5A534A]'}`}>
-                  Role selection
-                </p>
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Hand-drawn signature element */}
           <motion.div
             initial={{ pathLength: 0 }}
             animate={{ pathLength: 1 }}
-            transition={{ delay: 1, duration: 1.5, ease: "easeInOut" }}
+            transition={{ delay: 0.8, duration: 1.5, ease: "easeInOut" }}
             className="absolute bottom-12 right-12 w-24 h-24 opacity-20"
           >
             <svg viewBox="0 0 100 100" fill="none" stroke="#2D2A24" strokeWidth="1">
@@ -254,258 +159,217 @@ export default function RegisterPage() {
         </div>
 
         {/* Right side – form */}
-        <div className="p-6 lg:p-10 backdrop-blur-xl bg-white/70">
-          <div className="max-w-md mx-auto w-full">
+        <div className="p-6 lg:p-8 backdrop-blur-xl bg-white/70">
+          <div className="max-w-sm mx-auto w-full">
             {/* Mobile logo */}
             <div className="lg:hidden mb-6">
-              <h1 className="font-serif text-3xl font-medium text-[#2D2A24]">HireFlow</h1>
+              <h1 className="font-serif text-2xl font-medium text-[#2D2A24]">HireFlow</h1>
             </div>
 
-            {/* Header with step indicator */}
-            <div className="mb-6">
-              <h2 className="text-xl font-medium text-[#2D2A24]">
-                Step {currentStep} of {totalSteps}
-              </h2>
-              <p className="text-sm text-[#5A534A]">
-                {currentStep === 1 && "Create your account"}
-                {currentStep === 2 && "Select your role"}
-              </p>
-            </div>
+            {/* Header */}
+            <motion.div
+              variants={itemVariants}
+              initial="hidden"
+              animate="visible"
+              className="mb-6"
+            >
+              <h2 className="text-xl font-medium text-[#2D2A24] mb-1">Create account</h2>
+              <p className="text-sm text-[#5A534A]">Join our recruitment platform</p>
+            </motion.div>
 
-            <form onSubmit={handleSubmit(onSubmit)}>
-              {error && (
-                <div className="mb-4 p-3 bg-red-50/80 backdrop-blur-sm border border-red-200 rounded-lg flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 text-red-600" />
-                  <p className="text-sm text-red-800">{error}</p>
+            {/* Error Alert */}
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-3 p-2 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 flex items-start gap-2"
+              >
+                <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-red-700 dark:text-red-300">{error}</p>
+              </motion.div>
+            )}
+
+            {/* Form */}
+            <motion.form
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+              onSubmit={handleSubmit}
+              className="space-y-3"
+            >
+              <motion.div variants={itemVariants}>
+                <Label htmlFor="fullName" className="text-xs font-medium text-[#4A443C] mb-1 block">
+                  Full name
+                </Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-3 w-3 text-[#A69A8C]" />
+                  <Input
+                    id="fullName"
+                    name="fullName"
+                    type="text"
+                    placeholder="Enter your full name"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className="pl-9 h-9 bg-white/60 backdrop-blur-sm border-[#D6CDC2] focus:border-[#B8915C] focus:ring-[#B8915C]/20 rounded-xl transition-all placeholder:text-[#A69A8C] text-sm"
+                    required
+                  />
                 </div>
+              </motion.div>
+
+              <motion.div variants={itemVariants}>
+                <Label htmlFor="email" className="text-xs font-medium text-[#4A443C] mb-1 block">
+                  Work email
+                </Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-3 w-3 text-[#A69A8C]" />
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    placeholder="name@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="pl-9 h-9 bg-white/60 backdrop-blur-sm border-[#D6CDC2] focus:border-[#B8915C] focus:ring-[#B8915C]/20 rounded-xl transition-all placeholder:text-[#A69A8C] text-sm"
+                    required
+                  />
+                </div>
+              </motion.div>
+
+              <motion.div variants={itemVariants}>
+                <Label htmlFor="password" className="text-xs font-medium text-[#4A443C] mb-1 block">
+                  Password
+                </Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-3 w-3 text-[#A69A8C]" />
+                  <Input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="pl-9 pr-12 h-9 bg-white/60 backdrop-blur-sm border-[#D6CDC2] focus:border-[#B8915C] focus:ring-[#B8915C]/20 rounded-xl transition-all placeholder:text-[#A69A8C] text-sm"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-xs"
+                  >
+                    {showPassword ? "Hide" : "Show"}
+                  </button>
+                </div>
+              </motion.div>
+
+              <motion.div variants={itemVariants}>
+                <Label htmlFor="confirmPassword" className="text-xs font-medium text-[#4A443C] mb-1 block">
+                  Confirm password
+                </Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-3 w-3 text-[#A69A8C]" />
+                  <Input
+                    id="confirmPassword"
+                    name="confirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="pl-9 pr-12 h-9 bg-white/60 backdrop-blur-sm border-[#D6CDC2] focus:border-[#B8915C] focus:ring-[#B8915C]/20 rounded-xl transition-all placeholder:text-[#A69A8C] text-sm"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-xs"
+                  >
+                    {showConfirmPassword ? "Hide" : "Show"}
+                  </button>
+                </div>
+              </motion.div>
+
+              <motion.div variants={itemVariants}>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="isEmployer"
+                    checked={isEmployer}
+                    onChange={(e) => {
+                      setIsEmployer(e.target.checked);
+                      if (!e.target.checked) setCompany("");
+                    }}
+                    className="w-3 h-3 text-[#B8915C] bg-white/60 border-[#D6CDC2] rounded focus:ring-[#B8915C]/20 focus:ring-1"
+                  />
+                  <Label htmlFor="isEmployer" className="text-xs font-medium text-[#4A443C]">
+                    I'm an employer/recruiter
+                  </Label>
+                </div>
+              </motion.div>
+
+              {isEmployer && (
+                <motion.div
+                  variants={itemVariants}
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                >
+                  <Label htmlFor="company" className="text-xs font-medium text-[#4A443C] mb-1 block">
+                    Company name
+                  </Label>
+                  <div className="relative">
+                    <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-3 w-3 text-[#A69A8C]" />
+                    <Input
+                      id="company"
+                      name="company"
+                      type="text"
+                      placeholder="Enter your company name"
+                      value={company}
+                      onChange={(e) => setCompany(e.target.value)}
+                      className="pl-9 h-9 bg-white/60 backdrop-blur-sm border-[#D6CDC2] focus:border-[#B8915C] focus:ring-[#B8915C]/20 rounded-xl transition-all placeholder:text-[#A69A8C] text-sm"
+                      required
+                    />
+                  </div>
+                </motion.div>
               )}
-              
-              <AnimatePresence mode="wait">
-                {/* Step 1: Account Details */}
-                {currentStep === 1 && (
-                  <motion.div
-                    key="step1"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.3 }}
-                    className="space-y-4"
-                  >
-                    <div className="space-y-2">
-                      <Label htmlFor="fullName" className="text-sm font-medium text-[#4A443C]">
-                        Full name
-                      </Label>
-                      <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#A69A8C]" />
-                        <Input
-                          id="fullName"
-                          {...register("fullName")}
-                          placeholder="John Doe"
-                          className="pl-10 h-11 bg-white/60 backdrop-blur-sm border-[#D6CDC2] focus:border-[#B8915C] focus:ring-[#B8915C]/20 rounded-xl transition-all placeholder:text-[#A69A8C]"
-                        />
-                      </div>
-                      {errors.fullName && (
-                        <p className="text-sm text-red-600">{errors.fullName.message}</p>
-                      )}
-                    </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="email" className="text-sm font-medium text-[#4A443C]">
-                        Work email
-                      </Label>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#A69A8C]" />
-                        <Input
-                          id="email"
-                          type="email"
-                          {...register("email")}
-                          placeholder="name@company.com"
-                          className="pl-10 h-11 bg-white/60 backdrop-blur-sm border-[#D6CDC2] focus:border-[#B8915C] focus:ring-[#B8915C]/20 rounded-xl transition-all placeholder:text-[#A69A8C]"
-                        />
-                      </div>
-                      {errors.email && (
-                        <p className="text-sm text-red-600">{errors.email.message}</p>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="password" className="text-sm font-medium text-[#4A443C]">
-                        Password
-                      </Label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#A69A8C]" />
-                        <Input
-                          id="password"
-                          type={showPassword ? "text" : "password"}
-                          {...register("password")}
-                          placeholder="••••••••"
-                          className="pl-10 h-11 bg-white/60 backdrop-blur-sm border-[#D6CDC2] focus:border-[#B8915C] focus:ring-[#B8915C]/20 rounded-xl transition-all placeholder:text-[#A69A8C] pr-10"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-[#A69A8C] hover:text-[#5A534A] text-sm"
-                        >
-                          {showPassword ? "Hide" : "Show"}
-                        </button>
-                      </div>
-                      {errors.password && (
-                        <p className="text-sm text-red-600">{errors.password.message}</p>
-                      )}
-                    </div>
-                  </motion.div>
-                )}
-
-                {/* Step 2: Role Selection */}
-                {currentStep === 2 && (
-                  <motion.div
-                    key="step2"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.3 }}
-                    className="space-y-4"
-                  >
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium text-[#4A443C]">I am a</Label>
-                      <Controller
-                        control={control}
-                        name="role"
-                        render={({ field: { value, onChange } }) => (
-                          <Select value={value || ""} onValueChange={(newValue) => {
-                            onChange(newValue);
-                          }}>
-                            <SelectTrigger className={`h-11 bg-white/60 backdrop-blur-sm rounded-xl text-[#2D2A24] ${
-                              errors.role ? 'border-red-300 border-2' : 'border-[#D6CDC2]'
-                            }`}>
-                              <SelectValue placeholder="Select your role" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="candidate">👤 Candidate - Find your next opportunity</SelectItem>
-                              <SelectItem value="hr">🏢 Recruiter / HR - Hire talented candidates</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        )}
-                      />
-                      {errors.role && (
-                        <p className="text-sm text-red-600 font-medium">⚠️ {errors.role.message}</p>
-                      )}
-                    </div>
-
-                    <AnimatePresence>
-                      {selectedRole === "hr" && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.3 }}
-                          className="space-y-2 overflow-hidden"
-                        >
-                          <Label htmlFor="company" className="text-sm font-medium text-[#4A443C]">
-                            Company name
-                          </Label>
-                          <div className="relative">
-                            <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#A69A8C]" />
-                            <Input
-                              id="company"
-                              {...register("company")}
-                              placeholder="Acme Inc."
-                              className="pl-10 h-11 bg-white/60 backdrop-blur-sm border-[#D6CDC2] focus:border-[#B8915C] focus:ring-[#B8915C]/20 rounded-xl transition-all placeholder:text-[#A69A8C]"
-                            />
-                          </div>
-                          {errors.company && (
-                            <p className="text-sm text-red-600">{errors.company.message}</p>
-                          )}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Navigation buttons */}
-              <div className="mt-6 space-y-3">
-                <div className="flex gap-3">
-                  {currentStep > 1 && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={prevStep}
-                      className="flex-1 h-11 border-[#D6CDC2] text-[#4A443C] hover:bg-white/80 rounded-xl"
-                    >
-                      Back
-                    </Button>
-                  )}
-                  {currentStep < totalSteps ? (
-                    <Button
-                      type="button"
-                      onClick={nextStep}
-                      disabled={!isStepValid()}
-                      className="flex-1 h-11 bg-[#B8915C] hover:bg-[#9F7A4F] text-white rounded-xl shadow-lg shadow-[#B8915C]/20 hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Continue <ChevronRight className="ml-2 h-4 w-4" />
-                    </Button>
+              <motion.div variants={itemVariants}>
+                <Button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full h-9 bg-[#B8915C] hover:bg-[#9F7A4F] text-white font-medium rounded-xl shadow-lg shadow-[#B8915C]/20 hover:shadow-xl transition-all duration-200 text-sm"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                      Creating account...
+                    </>
                   ) : (
-                    <Button
-                      type="submit"
-                      disabled={!isStepValid() || isSubmitting}
-                      className="flex-1 h-11 bg-[#B8915C] hover:bg-[#9F7A4F] text-white rounded-xl shadow-lg shadow-[#B8915C]/20 hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isSubmitting ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Creating...
-                        </>
-                      ) : (
-                        <>
-                          Create Account <ArrowRight className="ml-2 h-4 w-4" />
-                        </>
-                      )}
-                    </Button>
+                    <>
+                      Create Account
+                      <ArrowRight className="ml-2 h-3 w-3" />
+                    </>
                   )}
-                </div>
+                </Button>
+              </motion.div>
 
-                {/* Artistic sign-in link */}
-                <div className="relative pt-4">
-                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 flex justify-center gap-1">
-                    {[...Array(5)].map((_, i) => (
-                      <div key={i} className="w-1 h-1 rounded-full bg-[#B8915C]/30" />
-                    ))}
-                  </div>
-                  <div className="mt-6 flex items-center justify-center gap-2">
-                    <span className="text-sm text-[#5A534A]">Already have an account?</span>
-                    <Link
-                      href="/login"
-                      className="group relative inline-flex items-center gap-1 text-[#B8915C] hover:text-[#9F7A4F] font-medium transition-colors"
-                    >
-                      <span>Sign in</span>
-                      <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
-                      <svg
-                        className="absolute -bottom-1 left-0 w-full h-2"
-                        viewBox="0 0 60 8"
-                        preserveAspectRatio="none"
-                      >
-                        <path
-                          d="M0 6 Q 15 2, 30 6 T 60 6"
-                          stroke="currentColor"
-                          strokeWidth="1.5"
-                          fill="none"
-                          strokeLinecap="round"
-                          className="opacity-50"
-                        />
-                      </svg>
-                    </Link>
-                  </div>
-                  <div className="mt-4 flex justify-center">
-                    <svg width="40" height="12" viewBox="0 0 40 12" fill="none">
-                      <path d="M2 10 L20 2 L38 10" stroke="#B8915C" strokeWidth="1" strokeLinecap="round" strokeDasharray="2 2" />
-                    </svg>
-                  </div>
+              {/* Artistic sign-in section */}
+              <motion.div variants={itemVariants} className="relative pt-2">
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-16 flex justify-center gap-1">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="w-0.5 h-0.5 rounded-full bg-[#B8915C]/30" />
+                  ))}
                 </div>
-              </div>
-
-             
-            </form>
+                <div className="mt-3 flex items-center justify-center gap-1">
+                  <span className="text-xs text-[#5A534A]">Already have an account?</span>
+                  <Link
+                    href="/login"
+                    className="group relative inline-flex items-center gap-1 text-[#B8915C] hover:text-[#9F7A4F] font-medium transition-colors"
+                  >
+                    <span className="text-xs">Sign in</span>
+                    <ArrowRight className="w-3 h-3 transition-transform group-hover:translate-x-0.5" />
+                  </Link>
+                </div>
+              </motion.div>
+            </motion.form>
           </div>
         </div>
       </motion.div>

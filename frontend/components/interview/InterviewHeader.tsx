@@ -20,7 +20,7 @@ export default function InterviewHeader({
   isSpeaking,
   isAISpeaking,
 }: InterviewHeaderProps) {
-  const { isOnline, isTabVisible } = useProctoring({ onDisqualify: () => {} });
+  const { isOnline, isTabVisible } = useProctoring();
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -64,7 +64,7 @@ export default function InterviewHeader({
             </Badge>
           )}
           <Badge
-            variant={violations === 0 ? "outline" : violations === 1 ? "warning" : "destructive"}
+            variant={violations === 0 ? "outline" : violations === 1 ? "secondary" : "destructive"}
             className="gap-1"
           >
             <AlertTriangle className="h-3 w-3" /> Violations: {violations}/3
