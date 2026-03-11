@@ -240,14 +240,15 @@ export function ApplicationCard({
                 transition={{ duration: 0.3 }}
                 className="mt-4"
               >
-                <Button
-                  size="sm"
-                  onClick={() => onScheduleInterview(application.id)}
-                  className="bg-[#B8915C] hover:bg-[#9F7A4F]"
-                >
-                  <MessageSquare className="h-4 w-4 mr-2" />
-                  Start Interview
-                </Button>
+                <Link href={`/candidate/interview/${application.id}`}>
+                  <Button
+                    size="sm"
+                    className="bg-[#B8915C] hover:bg-[#9F7A4F]"
+                  >
+                    <MessageSquare className="h-4 w-4 mr-2" />
+                    Start Interview
+                  </Button>
+                </Link>
               </motion.div>
             )}
           </div>
