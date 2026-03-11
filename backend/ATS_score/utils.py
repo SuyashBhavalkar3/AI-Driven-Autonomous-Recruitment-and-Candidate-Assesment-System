@@ -33,10 +33,14 @@ def build_candidate_profile(candidate: Candidate) -> dict:
         "experiences": [
             {
                 "company": exp.company_name,
-                "title": exp.title,
+                # the ORM stores job_title, not title
+                "title": exp.job_title,
                 "start_date": exp.start_date,
                 "end_date": exp.end_date,
-                "responsibilities": exp.responsibilities,
+                # description property is aliased to `responsibilities` in
+                # the Pydantic schema, but for generating the LLM profile
+                # we can just use it directly.
+                "responsibilities": exp.description,
             }
             for exp in candidate.experiences
         ],

@@ -79,7 +79,7 @@ def parse_resume(file,file_path):
         raise
 
 from sqlalchemy.orm import Session
-from resume_parsing.models import Education, Experience, Project, Skill, Certification
+from candidate_profile.models import Education, Experience, Project, Skill, Certification
 
 def save_parsed_data(db: Session, candidate_id: int, parsed_data: dict):
     """
@@ -87,36 +87,37 @@ def save_parsed_data(db: Session, candidate_id: int, parsed_data: dict):
     into its respective table linked to the candidate.
     """
     try:
-        # --- Education (single object in your schema) ---
+        # --- Education (single object) ---
         edu = parsed_data.get("education", {})
         if edu and any(edu.values()):
-            # our SQLAlchemy model doesn't declare the extra keys that the
-            # LLM sometimes returns (graduation_date, location, marks), so
-            # translate them into the columns we do persist.  `graduation_date`
-            # is stored as `end_date` and `marks` as `grade`.
             db.add(Education(
                 candidate_id=candidate_id,
                 degree=edu.get("degree"),
                 institution=edu.get("institution"),
-                start_date=edu.get("start_date") or edu.get("graduation_date"),
-                end_date=edu.get("end_date") or edu.get("graduation_date"),
-                grade=edu.get("marks"),
+                field_of_study=edu.get("field_of_study"),
+                start_date=edu.get("start_date"),
+                end_date=edu.get("end_date"),
+                grade=edu.get("grade"),
+                graduation_date=edu.get("graduation_date"),
+                marks=edu.get("marks"),
+                location=edu.get("location"),
             ))
 
-        # --- Experience (single object — wrap in list for flexibility) ---
+        # --- Experience (single object or list) ---
         exp_data = parsed_data.get("experience", {})
         if exp_data and any(exp_data.values()):
-            # Handle both single dict and list
             experiences = exp_data if isinstance(exp_data, list) else [exp_data]
             for exp in experiences:
                 db.add(Experience(
                     candidate_id=candidate_id,
                     company_name=exp.get("company_name"),
-                    title=exp.get("title"),
+                    job_title=exp.get("job_title"),
                     start_date=exp.get("start_date"),
                     end_date=exp.get("end_date"),
                     location=exp.get("location"),
-                    responsibilities=exp.get("responsibilities"),
+                    is_current=exp.get("is_current", False),
+                    description=exp.get("description"),
+                    marks=exp.get("marks"),
                 ))
 
         # --- Projects (list) ---
@@ -144,7 +145,6 @@ def save_parsed_data(db: Session, candidate_id: int, parsed_data: dict):
         # --- Certifications (string or list) ---
         certs = parsed_data.get("certifications", "")
         if isinstance(certs, str) and certs.strip():
-            # LLM sometimes returns comma-separated string
             for cert in certs.split(","):
                 cert = cert.strip()
                 if cert:
