@@ -1,9 +1,20 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from authentication.database import engine, Base, init_db
+
+# Import all models FIRST before any routes
+from authentication import models as auth_models
+from resume_parsing import models as resume_models
+from candidate_profile import models as candidate_models
+from job_management_module import models as job_models
+from applications import models as app_models
+from assessment import models as assessment_models
+from notifications import models as notif_models
+
+# Now import routes
 from ai_interview_bot.router import router as ai_router
 from ai_interview_bot.code_router import code_router
 from ai_interview_bot.tts_router import router as tts_router
-from authentication.database import engine, Base, init_db
 from authentication.routes import router as auth_router
 from resume_parsing.routes import router as resume_router
 from job_management_module.routes import router as jobs_router

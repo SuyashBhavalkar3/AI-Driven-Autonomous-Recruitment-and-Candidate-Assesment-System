@@ -22,8 +22,8 @@ def create_job(
     if not current_user.is_employer:
         raise HTTPException(status_code=403, detail="Only employers can create jobs")
     
-    if not current_user.profile_completed:
-        raise HTTPException(status_code=400, detail="Complete your company profile first")
+    # if not current_user.profile_completed:
+    #     raise HTTPException(status_code=400, detail="Complete your company profile first")
     
     new_job = Job(
         title=job.title,

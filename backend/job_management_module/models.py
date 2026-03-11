@@ -20,5 +20,5 @@ class Job(Base):
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    employer = relationship("User", backref="jobs")
+    employer = relationship("User", back_populates="jobs")
 

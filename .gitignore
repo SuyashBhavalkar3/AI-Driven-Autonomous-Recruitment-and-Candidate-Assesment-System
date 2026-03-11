@@ -6,3 +6,6 @@ codebits_env
 *.pyo
 myenv
 /backend/.env
+.venv
+.venv/
+backend/.venv
