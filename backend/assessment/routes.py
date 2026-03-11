@@ -4,59 +4,42 @@ from authentication.database import get_db
 from authentication.utils import get_current_user
 from authentication.models import User
 from applications.models import Application, ApplicationStatus
-from assessment.models import Assessment
-from assessment.schemas import AssessmentResponse, SubmitAssessmentRequest
+from assessment.models import Assessment, AssessmentQuestion, AssessmentAnswer
+from assessment.schemas import (
+    AssessmentStartResponse,
+    AssessmentQuestionResponse,
+    SubmitAssessmentRequest,
+    AssessmentResultResponse,
+    AssessmentFeedbackResponse,
+    AssessmentAnswerDetail
+)
+from assessment.assessment_service import evaluate_assessment_answers
 from middleware.rate_limiter import rate_limiter
 from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/assessment", tags=["Assessment"], dependencies=[Depends(rate_limiter)])
 
-# Sample questions - in production, these would be dynamically generated based on job requirements
-SAMPLE_QUESTIONS = [
-    {
-        "id": 1,
-        "type": "coding",
-        "title": "Implement a debounce function",
-        "description": "Create a debounce function that delays the execution of a function until after a specified wait time has elapsed since the last time it was invoked.",
-        "points": 30,
-        "starter_code": "function debounce(func, wait) {\n  // Your code here\n}\n\n// Test\nconst log = debounce(() => console.log('Hello'), 1000);\nlog(); log(); log();"
-    },
-    {
-        "id": 2,
-        "type": "coding",
-        "title": "Binary Tree Level Order Traversal",
-        "description": "Given the root of a binary tree, return the level order traversal of its nodes' values.",
-        "points": 40,
-        "starter_code": "function levelOrder(root) {\n  // Your code here\n}"
-    },
-    {
-        "id": 3,
-        "type": "mcq",
-        "title": "React Hooks",
-        "description": "Which hook would you use to perform side effects in a functional component?",
-        "options": ["useState", "useEffect", "useContext", "useMemo"],
-        "points": 10
-    },
-    {
-        "id": 4,
-        "type": "text",
-        "title": "System Design",
-        "description": "Explain how you would design a scalable URL shortener service. Include database design, caching, and handling high traffic.",
-        "points": 20
-    }
-]
 
-@router.get("/start/{application_id}", response_model=AssessmentResponse)
-def start_assessment(
+@router.get("/start/{application_id}", response_model=AssessmentStartResponse)
+async def start_assessment(
     application_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Start or retrieve assessment for an application"""
+    """
+    Start assessment for a candidate.
+    
+    Returns pre-generated questions WITHOUT correct answers.
+    If assessment doesn't exist, returns 404.
+    """
     
     if current_user.is_employer:
         raise HTTPException(status_code=403, detail="Employers cannot take assessments")
     
+    # Verify application belongs to current user
     application = db.query(Application).filter(
         Application.id == application_id,
         Application.user_id == current_user.id
@@ -65,129 +48,221 @@ def start_assessment(
     if not application:
         raise HTTPException(status_code=404, detail="Application not found")
     
-    if application.status not in [ApplicationStatus.ASSESSMENT_SCHEDULED, ApplicationStatus.RESUME_SCREENED]:
-        raise HTTPException(status_code=400, detail="Assessment not available for this application")
+    # Assessment should exist by this point (created during application)
+    assessment = db.query(Assessment).filter(
+        Assessment.application_id == application_id
+    ).first()
     
-    # Check if assessment already exists
-    assessment = db.query(Assessment).filter(Assessment.application_id == application_id).first()
+    if not assessment:
+        raise HTTPException(
+            status_code=400,
+            detail="Assessment not yet generated. Your resume did not meet the minimum threshold."
+        )
     
-    if assessment:
-        if assessment.completed:
-            raise HTTPException(status_code=400, detail="Assessment already completed")
-        return assessment
+    if assessment.completed:
+        raise HTTPException(status_code=400, detail="Assessment already completed")
     
-    # Create new assessment
-    assessment = Assessment(
-        application_id=application_id,
-        questions=SAMPLE_QUESTIONS,
-        started_at=datetime.utcnow()
+    # Update started_at if not already started
+    if not assessment.started_at:
+        assessment.started_at = datetime.utcnow()
+        db.commit()
+    
+    # Fetch questions without correct answers
+    questions_from_db = db.query(AssessmentQuestion).filter(
+        AssessmentQuestion.assessment_id == assessment.id
+    ).all()
+    
+    # Convert to response schema (without correct_option)
+    questions_response = [
+        AssessmentQuestionResponse(
+            id=q.id,
+            question_text=q.question_text,
+            option_a=q.option_a,
+            option_b=q.option_b,
+            option_c=q.option_c,
+            option_d=q.option_d,
+            topic=q.topic,
+            difficulty=q.difficulty
+        )
+        for q in questions_from_db
+    ]
+    
+    return AssessmentStartResponse(
+        id=assessment.id,
+        application_id=assessment.application_id,
+        questions=questions_response,
+        started_at=assessment.started_at,
+        completed=assessment.completed
     )
-    
-    db.add(assessment)
-    db.commit()
-    db.refresh(assessment)
-    
-    return assessment
 
 
-@router.post("/submit/{assessment_id}")
-def submit_assessment(
-    assessment_id: int,
+@router.post("/submit/{application_id}", response_model=AssessmentResultResponse)
+async def submit_assessment(
+    application_id: int,
     submission: SubmitAssessmentRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Submit assessment answers"""
+    """
+    Submit assessment answers and calculate score.
+    
+    Workflow:
+    1. Validate application and assessment
+    2. Store answers
+    3. Evaluate against correct answers
+    4. Update assessment with score
+    5. Update application status
+    """
     
     if current_user.is_employer:
         raise HTTPException(status_code=403, detail="Employers cannot submit assessments")
     
-    assessment = db.query(Assessment).filter(Assessment.id == assessment_id).first()
-    
-    if not assessment:
-        raise HTTPException(status_code=404, detail="Assessment not found")
-    
+    # Verify application
     application = db.query(Application).filter(
-        Application.id == assessment.application_id,
+        Application.id == application_id,
         Application.user_id == current_user.id
     ).first()
     
     if not application:
-        raise HTTPException(status_code=403, detail="Unauthorized")
+        raise HTTPException(status_code=404, detail="Application not found")
+    
+    # Get assessment
+    assessment = db.query(Assessment).filter(
+        Assessment.application_id == application_id
+    ).first()
+    
+    if not assessment:
+        raise HTTPException(status_code=400, detail="Assessment not found")
     
     if assessment.completed:
         raise HTTPException(status_code=400, detail="Assessment already submitted")
     
-    # Calculate score (simplified - in production, use AI for evaluation)
-    total_points = sum(q["points"] for q in assessment.questions)
-    earned_points = 0
+    # Store answers and calculate score
+    total_questions = db.query(AssessmentQuestion).filter(
+        AssessmentQuestion.assessment_id == assessment.id
+    ).count()
     
-    for question in assessment.questions:
-        q_id = str(question["id"])
-        if q_id in submission.answers:
-            # Simple scoring: give full points if answer exists
-            # In production, use AI to evaluate coding/text answers
-            if question["type"] == "mcq":
-                # Check correct answer (would be stored in DB)
-                earned_points += question["points"] * 0.8  # Assume 80% correct
-            else:
-                earned_points += question["points"] * 0.7  # Assume 70% for coding/text
+    correct_count = 0
     
-    score = int((earned_points / total_points) * 100)
+    for answer_data in submission.answers:
+        question = db.query(AssessmentQuestion).filter(
+            AssessmentQuestion.id == answer_data.question_id,
+            AssessmentQuestion.assessment_id == assessment.id
+        ).first()
+        
+        if not question:
+            raise HTTPException(status_code=400, detail=f"Question {answer_data.question_id} not found in this assessment")
+        
+        # Check if answer is correct
+        is_correct = answer_data.selected_option == question.correct_option
+        if is_correct:
+            correct_count += 1
+        
+        # Store the answer
+        answer_record = AssessmentAnswer(
+            assessment_id=assessment.id,
+            question_id=answer_data.question_id,
+            selected_option=answer_data.selected_option,
+            is_correct=is_correct
+        )
+        db.add(answer_record)
+    
+    # Calculate score (e.g., 10 points per correct answer for 10 questions)
+    points_per_question = 100 / total_questions if total_questions > 0 else 0
+    score = int(correct_count * points_per_question)
+    percentage = (correct_count / total_questions * 100) if total_questions > 0 else 0
     
     # Update assessment
-    assessment.answers = submission.answers
     assessment.score = score
     assessment.completed = True
     assessment.completed_at = datetime.utcnow()
     
     # Update application
     application.assessment_score = score
-    application.assessment_data = submission.answers
     application.status = ApplicationStatus.ASSESSMENT_COMPLETED
     
     db.commit()
+    db.refresh(assessment)
     
-    return {
-        "message": "Assessment submitted successfully",
-        "score": score,
-        "total_points": total_points,
-        "earned_points": int(earned_points)
-    }
+    logger.info(f"Assessment {assessment.id} submitted. Score: {score}/{100}, Percentage: {percentage:.2f}%")
+    
+    return AssessmentResultResponse(
+        id=assessment.id,
+        application_id=assessment.application_id,
+        score=score,
+        total_questions=total_questions,
+        percentage=round(percentage, 2),
+        questions_answered=len(submission.answers),
+        correct_answers=correct_count,
+        completed_at=assessment.completed_at
+    )
 
 
-@router.get("/result/{application_id}")
-def get_assessment_result(
+@router.get("/result/{application_id}", response_model=AssessmentFeedbackResponse)
+async def get_assessment_result(
     application_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get assessment results"""
+    """
+    Get detailed assessment results and feedback.
     
-    application = db.query(Application).filter(Application.id == application_id).first()
+    Returns score, percentage, correctness of each answer, and overall pass/fail.
+    Only available after assessment is completed.
+    """
+    
+    if current_user.is_employer:
+        raise HTTPException(status_code=403, detail="Employers cannot access this endpoint")
+    
+    # Verify application
+    application = db.query(Application).filter(
+        Application.id == application_id,
+        Application.user_id == current_user.id
+    ).first()
     
     if not application:
         raise HTTPException(status_code=404, detail="Application not found")
     
-    # Check authorization
-    if current_user.is_employer:
-        # HR can view if it's their job
-        if application.job.created_by != current_user.id:
-            raise HTTPException(status_code=403, detail="Unauthorized")
-    else:
-        # Candidate can view their own
-        if application.user_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Unauthorized")
+    # Get assessment
+    assessment = db.query(Assessment).filter(
+        Assessment.application_id == application_id
+    ).first()
     
-    assessment = db.query(Assessment).filter(Assessment.application_id == application_id).first()
+    if not assessment:
+        raise HTTPException(status_code=400, detail="Assessment not found")
     
-    if not assessment or not assessment.completed:
-        raise HTTPException(status_code=404, detail="Assessment not completed")
+    if not assessment.completed:
+        raise HTTPException(status_code=400, detail="Assessment not yet completed")
     
-    return {
-        "assessment_id": assessment.id,
-        "score": assessment.score,
-        "completed_at": assessment.completed_at,
-        "questions": assessment.questions,
-        "answers": assessment.answers if not current_user.is_employer else None  # Hide answers from HR
-    }
+    # Get all answers with their questions
+    answers = db.query(AssessmentAnswer).filter(
+        AssessmentAnswer.assessment_id == assessment.id
+    ).all()
+    
+    answer_details = []
+    for answer in answers:
+        question = answer.question
+        answer_details.append(
+            AssessmentAnswerDetail(
+                question_id=answer.question_id,
+                question_text=question.question_text,
+                selected_option=answer.selected_option,
+                correct_option=question.correct_option,
+                is_correct=answer.is_correct
+            )
+        )
+    
+    # Calculate metrics
+    total_questions = len(answer_details)
+    correct_count = sum(1 for a in answer_details if a.is_correct)
+    percentage = (correct_count / total_questions * 100) if total_questions > 0 else 0
+    passed = percentage >= 60  # 60% threshold
+    
+    return AssessmentFeedbackResponse(
+        score=assessment.score or 0,
+        total_questions=total_questions,
+        percentage=round(percentage, 2),
+        passed=passed,
+        answers=answer_details
+    )
+
