@@ -168,6 +168,7 @@ def complete_profile(current_user: User = Depends(get_current_user), db: Session
     has_experience = len(candidate.experiences) > 0
     has_education = len(candidate.education) > 0
     has_skills = len(candidate.skills) > 0
+    print(has_experience, candidate.experiences, has_education, candidate.education, has_skills, candidate.skills)
     
     if not (has_experience and has_education and has_skills):
         raise HTTPException(status_code=400, detail="Add at least one experience, education, and skill")

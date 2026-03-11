@@ -12,6 +12,8 @@ class Candidate(Base):
     linkedin_url = Column(String(500), nullable=False)
     resume_url = Column(String(500), nullable=False)
     parsed_data = Column(JSON, nullable=True)
+    profile_photo_url = Column(String, nullable=True)
+    bio = Column(String(500), nullable=True)
     profile_completed = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

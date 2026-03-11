@@ -27,6 +27,8 @@ async def upload_resume(
     phone: str = Form(...),
     linkedin_url: str = Form(...),
     file: UploadFile = File(...),
+    profile_photo: UploadFile = File(...),
+    bio: str = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -36,9 +38,18 @@ async def upload_resume(
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     ]:
         raise HTTPException(status_code=400, detail="Only PDF and Word documents are allowed.")
+    
+    if profile_photo.content_type not in [
+    "image/jpeg",
+    "image/png",
+    "image/jpg",
+    "image/webp"
+    ]:
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG, JPG and WEBP images are allowed for profile photo.")
 
     try:
         file_bytes = await file.read()
+        photo_bytes = await profile_photo.read()
 
         # Parse resume text → structured JSON via LLM
         parsed_data = parse_resume(io.BytesIO(file_bytes), file.filename)
@@ -49,6 +60,15 @@ async def upload_resume(
         )
         file_url = upload_result["secure_url"]
 
+        # Upload profile photo
+        photo_upload = cloudinary.uploader.upload(
+        photo_bytes,
+        resource_type="image",
+        public_id=f"profile_{current_user.id}"
+        )
+
+        photo_url = photo_upload["secure_url"]
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
 
@@ -58,6 +78,8 @@ async def upload_resume(
         phone=phone,
         linkedin_url=linkedin_url,
         resume_url=file_url,
+        profile_photo_url=photo_url,
+        bio=bio
     )
     db.add(candidate)
     db.commit()
