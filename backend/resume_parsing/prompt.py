@@ -11,28 +11,33 @@ Structure:
 "name": "",
 "email": "",
 "phone": "",
-"education": {{
-    "degree": "",
-    "institution": "",
-    "graduation_date": "",
-    "location": ""
-}},
-"experience": {{
-    "company_name": "",
-    "title": "",
-    "start_date": "",
-    "end_date": "",
-    "location": "",
-    "responsibilities": ""
-}},
-"skills": {{
-    "languages": "",
-    "backend_technologies": "",
-    "databases": "",
-    "ai_ml_frameworks": "",
-    "tools_platforms": "",
-    "core_competencies": ""
-}},
+"education": [
+    {{
+        "degree": "",
+        "institution": "",
+        "field_of_study": "",
+        "start_date": "",
+        "end_date": "",
+        "grade": ""
+    }}
+],
+"experience": [
+    {{
+        "company_name": "",
+        "job_title": "",
+        "start_date": "",
+        "end_date": "",
+        "location": "",
+        "description": "",
+        "is_current": false
+    }}
+],
+"skills": [
+    {{
+        "skill_name": "",
+        "proficiency": ""
+    }}
+],
 "projects": [
     {{
         "project_name": "",
@@ -41,7 +46,6 @@ Structure:
     }}
 ],
 "certifications": "",
-"leadership_extracurricular": "",
 "github_profile_url": "",
 "linkedin_url": ""
 }}

@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 import io
 from authentication.database import get_db
 from resume_parsing.models import Candidate
+from candidate_profile.models import Experience, Education, Skill, Project
 from resume_parsing.schemas import ResumeResponse
 from authentication.utils import get_current_user
 from authentication.models import User
@@ -75,5 +76,66 @@ async def upload_resume(
     db.add(resume)
     db.commit()
     db.refresh(resume)
+
+    # Save parsed data to separate tables
+    try:
+        # Save experiences
+        if data.get("experience"):
+            for exp in data["experience"]:
+                if exp.get("company_name") and exp.get("job_title"):
+                    experience = Experience(
+                        candidate_id=resume.id,
+                        company_name=exp.get("company_name", ""),
+                        job_title=exp.get("job_title", ""),
+                        location=exp.get("location"),
+                        start_date=exp.get("start_date", ""),
+                        end_date=exp.get("end_date"),
+                        is_current=exp.get("is_current", False),
+                        description=exp.get("description")
+                    )
+                    db.add(experience)
+        
+        # Save education
+        if data.get("education"):
+            for edu in data["education"]:
+                if edu.get("institution") and edu.get("degree"):
+                    education = Education(
+                        candidate_id=resume.id,
+                        institution=edu.get("institution", ""),
+                        degree=edu.get("degree", ""),
+                        field_of_study=edu.get("field_of_study"),
+                        start_date=edu.get("start_date", ""),
+                        end_date=edu.get("end_date"),
+                        grade=edu.get("grade")
+                    )
+                    db.add(education)
+        
+        # Save skills
+        if data.get("skills"):
+            for skill in data["skills"]:
+                if skill.get("skill_name"):
+                    skill_obj = Skill(
+                        candidate_id=resume.id,
+                        skill_name=skill.get("skill_name", ""),
+                        proficiency=skill.get("proficiency")
+                    )
+                    db.add(skill_obj)
+        
+        # Save projects
+        if data.get("projects"):
+            for proj in data["projects"]:
+                if proj.get("project_name"):
+                    project = Project(
+                        candidate_id=resume.id,
+                        project_name=proj.get("project_name", ""),
+                        description=proj.get("description"),
+                        github_url=proj.get("github_url")
+                    )
+                    db.add(project)
+        
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to save parsed data: {str(e)}")
 
     return resume

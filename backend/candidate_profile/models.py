@@ -44,3 +44,15 @@ class Skill(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     candidate = relationship("Candidate", back_populates="skills")
+
+class Project(Base):
+    __tablename__ = "projects"
+
+    id = Column(Integer, primary_key=True, index=True)
+    candidate_id = Column(Integer, ForeignKey("candidates.id", ondelete="CASCADE"), nullable=False)
+    project_name = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    github_url = Column(String(500), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    candidate = relationship("Candidate", back_populates="projects")

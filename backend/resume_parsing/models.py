@@ -19,3 +19,4 @@ class Candidate(Base):
     experiences = relationship("Experience", back_populates="candidate", cascade="all, delete")
     education = relationship("Education", back_populates="candidate", cascade="all, delete")
     skills = relationship("Skill", back_populates="candidate", cascade="all, delete")
+    projects = relationship("Project", back_populates="candidate", cascade="all, delete")
