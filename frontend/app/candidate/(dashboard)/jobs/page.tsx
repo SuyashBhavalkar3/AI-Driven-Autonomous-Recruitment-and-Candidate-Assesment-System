@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import {
   AlertCircle,
   Briefcase,
+  CheckCircle2,
   DollarSign,
   Loader2,
   MapPin,
@@ -41,6 +42,7 @@ const formatStatus = (value: string) =>
 
 export default function JobsPage() {
   const [jobs, setJobs] = useState<CandidateJob[]>([]);
+  const [appliedJobIds, setAppliedJobIds] = useState<Set<number>>(new Set());
   const [selectedJob, setSelectedJob] = useState<CandidateJob | null>(null);
   const [applyState, setApplyState] = useState<ApplyState>({ status: "idle" });
   const [searchTerm, setSearchTerm] = useState("");
@@ -54,10 +56,14 @@ export default function JobsPage() {
     async function loadJobs() {
       try {
         setLoading(true);
-        const response = await jobsAPI.getAllJobs();
+        const [jobsResponse, applications] = await Promise.all([
+          jobsAPI.getAllJobs(),
+          applicationsAPI.getMyApplications(),
+        ]);
 
         if (mounted) {
-          setJobs(response.jobs);
+          setJobs(jobsResponse.jobs);
+          setAppliedJobIds(new Set(applications.map((application) => application.job_id)));
         }
       } catch (loadError) {
         if (mounted) {
@@ -94,6 +100,10 @@ export default function JobsPage() {
   }, [jobs, searchTerm]);
 
   const handleApply = async (job: CandidateJob) => {
+    if (appliedJobIds.has(job.id)) {
+      return;
+    }
+
     const canApply = await enforceProfileCompletion();
     if (!canApply) {
       return;
@@ -111,6 +121,7 @@ export default function JobsPage() {
     try {
       setApplyState({ status: "applying" });
       const application = await applicationsAPI.applyForJob(selectedJob.id);
+      setAppliedJobIds((current) => new Set(current).add(selectedJob.id));
       setApplyState({
         status: "success",
         applicationId: application.id,
@@ -186,75 +197,90 @@ export default function JobsPage() {
               </Card>
             ))
           ) : (
-            filteredJobs.map((job) => (
-              <motion.div
-                key={job.id}
-                whileHover={{ y: -2 }}
-                transition={{ type: "spring", stiffness: 400 }}
-              >
-                <Card className="border border-white/20 bg-white/70 shadow-2xl backdrop-blur-xl transition-all duration-300 hover:shadow-2xl dark:bg-slate-900/70">
-                  <CardContent className="p-6">
-                    <div className="flex gap-4">
-                      <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#B8915C] to-[#9F7A4F] font-semibold text-white">
-                        {job.title.slice(0, 2).toUpperCase()}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1">
-                            <h3 className="text-lg font-semibold text-[#2D2A24] dark:text-white">
-                              {job.title}
-                            </h3>
-                            <p className="mt-1 text-sm text-[#5A534A] dark:text-slate-400">
-                              Job ID: {job.id}
-                            </p>
-                          </div>
-                          <Button
-                            onClick={() => handleApply(job)}
-                            size="sm"
-                            className="bg-[#B8915C] hover:bg-[#9F7A4F]"
-                          >
-                            Apply
-                          </Button>
+            filteredJobs.map((job) => {
+              const alreadyApplied = appliedJobIds.has(job.id);
+
+              return (
+                <motion.div
+                  key={job.id}
+                  whileHover={{ y: -2 }}
+                  transition={{ type: "spring", stiffness: 400 }}
+                >
+                  <Card className="border border-white/20 bg-white/70 shadow-2xl backdrop-blur-xl transition-all duration-300 hover:shadow-2xl dark:bg-slate-900/70">
+                    <CardContent className="p-6">
+                      <div className="flex gap-4">
+                        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#B8915C] to-[#9F7A4F] font-semibold text-white">
+                          {job.title.slice(0, 2).toUpperCase()}
                         </div>
-
-                        <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-[#5A534A] dark:text-slate-400">
-                          <span className="flex items-center gap-1">
-                            <MapPin className="h-4 w-4" />
-                            {job.location || "Location not specified"}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <DollarSign className="h-4 w-4" />
-                            {job.salary_range || "Salary not specified"}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Briefcase className="h-4 w-4" />
-                            {job.experience_required
-                              ? `${job.experience_required}+ years`
-                              : "Experience flexible"}
-                          </span>
-                        </div>
-
-                        <p className="mt-3 text-sm text-[#5A534A] dark:text-slate-400">
-                          {job.description || "No description provided."}
-                        </p>
-
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {(job.required_skills || []).map((skill) => (
-                            <Badge
-                              key={skill}
-                              variant="outline"
-                              className="border-[#B8915C]/30 text-[#B8915C]"
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <h3 className="text-lg font-semibold text-[#2D2A24] dark:text-white">
+                                {job.title}
+                              </h3>
+                              <p className="mt-1 text-sm text-[#5A534A] dark:text-slate-400">
+                                Job ID: {job.id}
+                              </p>
+                            </div>
+                            <Button
+                              onClick={() => handleApply(job)}
+                              size="sm"
+                              disabled={alreadyApplied}
+                              className={
+                                alreadyApplied
+                                  ? "cursor-not-allowed bg-[#B8915C]/30 text-[#8A7E70] hover:bg-[#B8915C]/30"
+                                  : "bg-[#B8915C] hover:bg-[#9F7A4F]"
+                              }
                             >
-                              {skill}
-                            </Badge>
-                          ))}
+                              {alreadyApplied ? "Applied" : "Apply"}
+                            </Button>
+                          </div>
+
+                          <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-[#5A534A] dark:text-slate-400">
+                            <span className="flex items-center gap-1">
+                              <MapPin className="h-4 w-4" />
+                              {job.location || "Location not specified"}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <DollarSign className="h-4 w-4" />
+                              {job.salary_range || "Salary not specified"}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Briefcase className="h-4 w-4" />
+                              {job.experience_required
+                                ? `${job.experience_required}+ years`
+                                : "Experience flexible"}
+                            </span>
+                          </div>
+
+                          <p className="mt-3 text-sm text-[#5A534A] dark:text-slate-400">
+                            {job.description || "No description provided."}
+                          </p>
+
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {alreadyApplied && (
+                              <Badge className="border-none bg-[#B8915C]/10 text-[#B8915C]">
+                                <CheckCircle2 className="mr-1 h-3 w-3" />
+                                Application exists
+                              </Badge>
+                            )}
+                            {(job.required_skills || []).map((skill) => (
+                              <Badge
+                                key={skill}
+                                variant="outline"
+                                className="border-[#B8915C]/30 text-[#B8915C]"
+                              >
+                                {skill}
+                              </Badge>
+                            ))}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              );
+            })
           )}
         </div>
       </div>

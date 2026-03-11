@@ -211,6 +211,43 @@ export interface CandidateJobsResponse {
   jobs: CandidateJob[];
 }
 
+export interface CandidateDashboardStats {
+  total_applications: number;
+  applications_this_week: number;
+  in_progress: number;
+  interviews_total: number;
+  upcoming_interviews: number;
+  offers_received: number;
+  offers_pending_response: number;
+  unread_notifications: number;
+}
+
+export interface CandidateDashboardActivity {
+  id: number;
+  job_id: number;
+  job_title: string;
+  status: string;
+  updated_at?: string | null;
+  resume_score: number | null;
+  assessment_score: number | null;
+  screening_status: "pending" | "passed" | "not_selected";
+  screening_threshold: number;
+  resume_screened: boolean;
+  passed_screening: boolean;
+  next_step_message: string;
+}
+
+export interface CandidateSchedule {
+  id: number;
+  application_id: number;
+  schedule_type: "assessment" | "interview";
+  scheduled_time: string;
+  duration_minutes: number;
+  reminder_sent: boolean;
+  completed: boolean;
+  rescheduled_count: number;
+}
+
 export async function registerUser(data: RegisterData): Promise<UserData> {
   const response = await fetch(`${API_BASE_URL}/v1/auth/register`, {
     method: 'POST',
@@ -338,7 +375,7 @@ export const profileAPI = {
 
 // Dashboard API
 export const dashboardAPI = {
-  getCandidateStats: async () => {
+  getCandidateStats: async (): Promise<CandidateDashboardStats> => {
     const res = await fetch(`${API_BASE_URL}/v1/candidate/dashboard/stats`, {
       headers: getAuthHeaders(),
     });
@@ -346,7 +383,7 @@ export const dashboardAPI = {
     return res.json();
   },
 
-  getCandidateActivity: async (limit: number = 10) => {
+  getCandidateActivity: async (limit: number = 10): Promise<CandidateDashboardActivity[]> => {
     const res = await fetch(`${API_BASE_URL}/v1/candidate/dashboard/activity?limit=${limit}`, {
       headers: getAuthHeaders(),
     });
@@ -522,6 +559,16 @@ export const assessmentAPI = {
       const error = await res.json().catch(() => ({}));
       throw new Error(error.detail || 'Failed to submit assessment');
     }
+    return res.json();
+  },
+};
+
+export const schedulingAPI = {
+  getMySchedules: async (): Promise<CandidateSchedule[]> => {
+    const res = await fetch(`${API_BASE_URL}/v1/scheduling/my-schedules`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to fetch schedules');
     return res.json();
   },
 };
