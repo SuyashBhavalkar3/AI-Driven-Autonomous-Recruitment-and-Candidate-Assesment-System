@@ -42,7 +42,7 @@ export default function LoginPage() {
       const userData = await getCurrentUser(access_token);
       const userRole = userData.is_employer ? "hr" : "candidate";
       
-      setUserRole(userRole);
+      setUserRole(userData.is_employer); // Pass boolean to setUserRole
       setUserData(userData);
 
       router.push(userRole === "hr" ? "/hr" : "/candidate");

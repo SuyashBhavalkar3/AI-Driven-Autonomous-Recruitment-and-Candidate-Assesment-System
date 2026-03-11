@@ -197,13 +197,14 @@ export default function ApplicantsPage() {
           const applicantsData: Application[] = await applicantsRes.json();
           // Attach job title to each application
           applicantsData.forEach((app) => {
+            console.log(app);
             app.job_title = job.title;
             // Placeholder fields – you could extend backend to include candidate details
-            app.candidate_name = `Candidate ${app.candidate_id}`;
-            app.candidate_email = `${app.candidate_id}@example.com`;
-            app.candidate_phone = "N/A";
-            app.candidate_skills = job.required_skills || [];
-            app.candidate_experience = job.experience_required
+            app.candidate_name = `${app.candidate_name}`;
+            app.candidate_email = `${app.candidate_email}@example.com`;
+            app.candidate_phone = app.candidate_phone;
+            app.candidate_skills = app.candidate_skills || [];
+            app.candidate_experience = app.candidate_experience
               ? `${job.experience_required}+ years`
               : "N/A";
           });

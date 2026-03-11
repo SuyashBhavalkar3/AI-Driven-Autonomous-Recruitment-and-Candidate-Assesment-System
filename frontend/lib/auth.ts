@@ -30,7 +30,8 @@ export function getIsEmployer(): boolean | null {
   return value ? value === 'true' : null;
 }
 
-export function setUserRole(role: string) {
+export function setUserRole(isEmployer: boolean) {
+  const role = isEmployer ? 'hr' : 'candidate';
   Cookies.set(ROLE_KEY, role, { expires: 7 });
 }
 
@@ -40,6 +41,10 @@ export function getUserRole(): string | null {
 
 export function setUserData(data: any) {
   Cookies.set(USER_KEY, JSON.stringify(data), { expires: 7 });
+  // Also set the role based on is_employer field
+  if (data.is_employer !== undefined) {
+    setUserRole(data.is_employer);
+  }
 }
 
 export function getUserData(): any | null {
@@ -53,5 +58,11 @@ export function isAuthenticated(): boolean {
 
 export function logout() {
   removeAuthToken();
-  window.location.href = '/login';
+  // Redirect based on current role
+  const role = getUserRole();
+  if (role === 'hr') {
+    window.location.href = '/login?role=hr';
+  } else {
+    window.location.href = '/login';
+  }
 }

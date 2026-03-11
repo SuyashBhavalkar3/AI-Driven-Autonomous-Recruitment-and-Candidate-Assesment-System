@@ -345,13 +345,13 @@ def get_my_application_detail(
 
 # HR ROUTES
 
-@router.get("/job/{job_id}/applicants", response_model=List[ApplicationResponse])
+@router.get("/job/{job_id}/applicants")
 def get_job_applicants(
     job_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """HR: Get all applicants for a specific job"""
+    """HR: Get all applicants for a specific job with candidate details"""
     
     if not current_user.is_employer:
         raise HTTPException(status_code=403, detail="Only employers can access this endpoint")
@@ -361,18 +361,67 @@ def get_job_applicants(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found or unauthorized")
     
+    # Get applications with candidate and user data
+    from resume_parsing.models import Candidate
+    from candidate_profile.models import Experience, Skill
+    
     applications = db.query(Application).filter(
         Application.job_id == job_id
     ).order_by(Application.resume_match_score.desc()).all()
     
-    # Convert applications to proper format
+    # Format applications with candidate details
     formatted_applications = []
     for app in applications:
+        # Get candidate details
+        candidate = db.query(Candidate).filter(Candidate.id == app.candidate_id).first()
+        user = None
+        candidate_name = f"Candidate {app.candidate_id}"
+        candidate_email = "N/A"
+        candidate_phone = "N/A"
+        candidate_skills = []
+        candidate_experience = "N/A"
+        
+        if candidate:
+            # Get user details
+            user = db.query(User).filter(User.id == candidate.user_id).first()
+            if user:
+                candidate_name = user.name or f"Candidate {app.candidate_id}"
+                candidate_email = user.email or "N/A"
+            
+            candidate_phone = candidate.phone or "N/A"
+            
+            # Get skills
+            skills = db.query(Skill).filter(Skill.candidate_id == candidate.id).all()
+            all_skills = []
+            for skill in skills:
+                if skill.languages:
+                    all_skills.extend([s.strip() for s in skill.languages.split(',') if s.strip()])
+                if skill.backend_technologies:
+                    all_skills.extend([s.strip() for s in skill.backend_technologies.split(',') if s.strip()])
+                if skill.databases:
+                    all_skills.extend([s.strip() for s in skill.databases.split(',') if s.strip()])
+            candidate_skills = list(set(all_skills))[:5]  # Top 5 unique skills
+            
+            # Get experience summary
+            experiences = db.query(Experience).filter(Experience.candidate_id == candidate.id).all()
+            if experiences:
+                exp_list = []
+                for exp in experiences[:2]:  # First 2 experiences
+                    exp_str = f"{exp.job_title} at {exp.company_name}"
+                    exp_list.append(exp_str)
+                candidate_experience = "; ".join(exp_list)
+        
         app_dict = {
             "id": app.id,
             "job_id": app.job_id,
             "candidate_id": app.candidate_id,
+            "candidate_name": candidate_name,
+            "candidate_email": candidate_email,
+            "candidate_phone": candidate_phone,
+            "candidate_skills": candidate_skills,
+            "candidate_experience": candidate_experience,
             "user_id": app.user_id,
+            "job_title": job.title,
             "status": app.status,
             "resume_match_score": app.resume_match_score,
             "resume_analysis": app.resume_analysis,
@@ -380,7 +429,8 @@ def get_job_applicants(
             "interview_score": app.interview_score,
             "final_score": app.final_score,
             "hr_notes": app.hr_notes,
-            "created_at": app.created_at
+            "created_at": app.created_at,
+            "status_display": get_application_status_display(app)
         }
         formatted_applications.append(app_dict)
     
@@ -429,7 +479,125 @@ def get_top_scorers(
     }
 
 
-@router.get("/application/{application_id}/detail", response_model=ApplicationDetailResponse)
+@router.get("/application/{application_id}/candidate-details")
+def get_application_with_candidate_details(
+    application_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """HR: Get application with complete candidate details including name, email, skills, experience"""
+    
+    if not current_user.is_employer:
+        raise HTTPException(status_code=403, detail="Only employers can access this endpoint")
+    
+    # Get application with all related data
+    application = db.query(Application).filter(Application.id == application_id).first()
+    if not application:
+        raise HTTPException(status_code=404, detail="Application not found")
+    
+    # Verify job belongs to this employer
+    if application.job.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized access")
+    
+    # Get candidate with all related data
+    from resume_parsing.models import Candidate
+    from candidate_profile.models import Experience, Education, Skill, Project, Certification
+    
+    candidate = db.query(Candidate).filter(Candidate.id == application.candidate_id).first()
+    if not candidate:
+        return {
+            "id": application.id,
+            "candidate_id": application.candidate_id,
+            "candidate_name": f"Candidate {application.candidate_id}",
+            "candidate_email": "N/A",
+            "candidate_phone": "N/A",
+            "candidate_skills": [],
+            "candidate_experience": "N/A",
+            "job_id": application.job_id,
+            "job_title": application.job.title if application.job else "N/A",
+            "status": application.status,
+            "resume_match_score": application.resume_match_score,
+            "assessment_score": application.assessment_score,
+            "interview_score": application.interview_score,
+            "final_score": application.final_score,
+            "resume_analysis": application.resume_analysis,
+            "hr_notes": application.hr_notes,
+            "created_at": application.created_at,
+            "user_id": application.user_id,
+            "company": None,
+            "job": None,
+            "status_display": None
+        }
+    
+    # Get user details
+    user = db.query(User).filter(User.id == candidate.user_id).first()
+    
+    # Get candidate skills
+    skills = db.query(Skill).filter(Skill.candidate_id == candidate.id).all()
+    all_skills = []
+    for skill in skills:
+        if skill.languages:
+            all_skills.extend([s.strip() for s in skill.languages.split(',') if s.strip()])
+        if skill.backend_technologies:
+            all_skills.extend([s.strip() for s in skill.backend_technologies.split(',') if s.strip()])
+        if skill.databases:
+            all_skills.extend([s.strip() for s in skill.databases.split(',') if s.strip()])
+        if skill.ai_ml_frameworks:
+            all_skills.extend([s.strip() for s in skill.ai_ml_frameworks.split(',') if s.strip()])
+        if skill.tools_platforms:
+            all_skills.extend([s.strip() for s in skill.tools_platforms.split(',') if s.strip()])
+        if skill.core_competencies:
+            all_skills.extend([s.strip() for s in skill.core_competencies.split(',') if s.strip()])
+    
+    # Get candidate experience
+    experiences = db.query(Experience).filter(Experience.candidate_id == candidate.id).all()
+    experience_summary = "N/A"
+    if experiences:
+        exp_list = []
+        for exp in experiences:
+            exp_str = f"{exp.job_title} at {exp.company_name}"
+            if exp.start_date and exp.end_date:
+                exp_str += f" ({exp.start_date} - {exp.end_date})"
+            exp_list.append(exp_str)
+        experience_summary = "; ".join(exp_list[:3])  # First 3 experiences
+    
+    # Get company details
+    company_info = None
+    if application.job and application.job.employer:
+        company_info = {
+            "name": application.job.employer.company_name or application.job.employer.name,
+            "website": application.job.employer.company_website,
+            "description": application.job.employer.company_description
+        }
+    
+    return {
+        "id": application.id,
+        "candidate_id": application.candidate_id,
+        "candidate_name": user.name if user else f"Candidate {application.candidate_id}",
+        "candidate_email": user.email if user else "N/A",
+        "candidate_phone": candidate.phone or "N/A",
+        "candidate_skills": list(set(all_skills))[:10],  # Remove duplicates, limit to 10
+        "candidate_experience": experience_summary,
+        "job_id": application.job_id,
+        "job_title": application.job.title if application.job else "N/A",
+        "status": application.status,
+        "resume_match_score": application.resume_match_score,
+        "assessment_score": application.assessment_score,
+        "interview_score": application.interview_score,
+        "final_score": application.final_score,
+        "resume_analysis": application.resume_analysis,
+        "hr_notes": application.hr_notes,
+        "created_at": application.created_at,
+        "user_id": application.user_id,
+        "company": company_info,
+        "job": {
+            "id": application.job.id,
+            "title": application.job.title,
+            "description": application.job.description,
+            "location": application.job.location
+        } if application.job else None,
+        "status_display": get_application_status_display(application)
+    }
 def get_application_detail_hr(
     application_id: int,
     current_user: User = Depends(get_current_user),

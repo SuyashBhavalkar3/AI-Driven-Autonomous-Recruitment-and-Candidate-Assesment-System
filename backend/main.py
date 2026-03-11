@@ -16,6 +16,9 @@ from candidate_dashboard.routes import router as candidate_dashboard_router
 from hr_dashboard.routes import router as hr_dashboard_router
 from hr_actions.routes import router as hr_actions_router
 from proctoring.routes import router as proctoring_router
+from ATS_score.route import router as ats_router
+from resume_analysis.routes import router as resume_analysis_router
+from test_data.routes import router as test_data_router
 
 Base.metadata.create_all(bind=engine)
 
@@ -51,6 +54,7 @@ def read_root():
             "hr_actions": "/v1/hr/actions",
             "proctoring": "/v1/proctoring",
             "resume": "/v1/resume",
+            "resume_analysis": "/v1/resume-analysis",
             "interview": "/interview"
         }
     }
@@ -70,6 +74,9 @@ app.include_router(resume_router)
 app.include_router(ai_router)
 app.include_router(code_router)
 app.include_router(tts_router)
+app.include_router(ats_router)
+app.include_router(resume_analysis_router)
+app.include_router(test_data_router)
 
 @app.on_event("startup")
 def on_startup():

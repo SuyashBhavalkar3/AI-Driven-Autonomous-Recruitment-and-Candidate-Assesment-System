@@ -58,7 +58,6 @@ def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
     ) -> User:
-    token = credentials.credentials
     """
     Extract current user from JWT token and return a User object.
     """
@@ -67,16 +66,25 @@ def get_current_user(
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    
     try:
-        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        token = credentials.credentials
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("sub")
         if user_id is None:
             raise credentials_exception
-    except jwt.PyJWTError:
+    except jwt.PyJWTError as e:
+        print(f"JWT Error: {e}")
+        raise credentials_exception
+    except Exception as e:
+        print(f"Auth Error: {e}")
         raise credentials_exception
 
-    user = db.query(User).filter(User.id == int(user_id)).first()
-    
-    if user is None:
+    try:
+        user = db.query(User).filter(User.id == int(user_id)).first()
+        if user is None:
+            raise credentials_exception
+        return user
+    except Exception as e:
+        print(f"Database Error: {e}")
         raise credentials_exception
-    return user

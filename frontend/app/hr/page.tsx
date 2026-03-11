@@ -19,8 +19,6 @@ import {
   ChevronRight,
   Eye,
   Award,
-  Loader2,
-
   AlertCircle,
 } from "lucide-react";
 import Loader from "@/components/Loader";
@@ -43,6 +41,8 @@ interface StatsResponse {
 interface RecentApplicant {
   id: number;
   candidate_id: number;
+  candidate_name: string;
+  candidate_email: string;
   job_title: string;
   status: string;
   resume_score: number | null;
@@ -106,10 +106,37 @@ const formatStatus = (status: string) => {
 export default function HRDashboard() {
   const router = useRouter();
 
+  const createTestData = async () => {
+    try {
+      setCreatingTestData(true);
+      const token = getAuthToken();
+      
+      const response = await fetch("http://localhost:8000/v1/test/create-sample-data", {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to create test data: ${errorText}`);
+      }
+      
+      const result = await response.json();
+      console.log('Test data created:', result);
+      
+      // Refresh the dashboard data
+      window.location.reload();
+    } catch (err: any) {
+      console.error('Error creating test data:', err);
+      setError(err.message || 'Failed to create test data');
+    } finally {
+      setCreatingTestData(false);
+    }
+  };
+
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [loading, setLoading] = useState(true);
-
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [recentApplicants, setRecentApplicants] = useState<RecentApplicant[]>([]);
@@ -130,46 +157,114 @@ export default function HRDashboard() {
 
         // Check role
         const role = getUserRole();
+        console.log('Current user role:', role);
+        console.log('Auth token exists:', !!token);
         if (role !== "hr") {
-          setError("You don't have permission to view this page.");
+          setError(`You don't have permission to view this page. Current role: ${role}`);
           setLoading(false);
           return;
         }
 
+        // Test authentication first
+        console.log('Testing authentication...');
+        const authTestRes = await fetch("http://localhost:8000/v1/auth/me", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        console.log('Auth test response status:', authTestRes.status);
+        if (!authTestRes.ok) {
+          const errorText = await authTestRes.text();
+          console.error('Auth test error:', errorText);
+          throw new Error(`Authentication failed: ${authTestRes.status} - ${errorText}`);
+        }
+        const authData = await authTestRes.json();
+        console.log('Auth test data:', authData);
+        console.log('User is_employer:', authData.is_employer);
+
         // Fetch HR profile to get user id (for filtering jobs)
+        console.log('Fetching HR profile...');
         const profileRes = await fetch("http://localhost:8000/v1/profile/hr", {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!profileRes.ok) throw new Error("Failed to fetch profile");
-        const profileData = await profileRes.json();
-        setHrProfile(profileData);
+        console.log('Profile response status:', profileRes.status);
+        
+        let currentHrProfile: HRProfile;
+        if (!profileRes.ok) {
+          const errorText = await profileRes.text();
+          console.error('Profile error:', errorText);
+          // Try alternative endpoint
+          const altProfileRes = await fetch("http://localhost:8000/v1/auth/me", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!altProfileRes.ok) {
+            throw new Error(`Failed to fetch profile: ${profileRes.status}`);
+          }
+          const altProfileData = await altProfileRes.json();
+          console.log('Alternative profile data:', altProfileData);
+          currentHrProfile = {
+            id: altProfileData.id,
+            name: altProfileData.name,
+            email: altProfileData.email,
+            company: altProfileData.company_name || 'Company',
+            created_at: altProfileData.created_at
+          };
+        } else {
+          const profileData = await profileRes.json();
+          console.log('Profile data received:', profileData);
+          currentHrProfile = profileData;
+        }
+        setHrProfile(currentHrProfile);
 
         // Fetch stats
+        console.log('Fetching HR stats...');
         const statsRes = await fetch("http://localhost:8000/v1/hr/dashboard/stats", {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!statsRes.ok) throw new Error("Failed to fetch stats");
+        console.log('Stats response status:', statsRes.status);
+        if (!statsRes.ok) {
+          const errorText = await statsRes.text();
+          console.error('Stats error:', errorText);
+          console.error('Stats response headers:', Object.fromEntries(statsRes.headers.entries()));
+          throw new Error(`Failed to fetch stats: ${statsRes.status} - ${errorText}`);
+        }
         const statsData = await statsRes.json();
+        console.log('Stats data received:', statsData);
+        console.log('Stats data keys:', Object.keys(statsData));
+        console.log('Stats data values:', Object.values(statsData));
         setStats(statsData);
 
         // Fetch recent applicants
+        console.log('Fetching recent applicants...');
         const applicantsRes = await fetch(
           "http://localhost:8000/v1/hr/dashboard/recent-applicants?limit=3",
           { headers: { Authorization: `Bearer ${token}` } }
         );
-        if (!applicantsRes.ok) throw new Error("Failed to fetch recent applicants");
+        console.log('Applicants response status:', applicantsRes.status);
+        if (!applicantsRes.ok) {
+          const errorText = await applicantsRes.text();
+          console.error('Applicants error:', errorText);
+          throw new Error(`Failed to fetch recent applicants: ${applicantsRes.status} - ${errorText}`);
+        }
         const applicantsData = await applicantsRes.json();
+        console.log('Applicants data received:', applicantsData);
         setRecentApplicants(applicantsData);
 
         // Fetch all jobs and filter by current user
+        console.log('Fetching jobs...');
         const jobsRes = await fetch("http://localhost:8000/jobs/", {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!jobsRes.ok) throw new Error("Failed to fetch jobs");
+        console.log('Jobs response status:', jobsRes.status);
+        if (!jobsRes.ok) {
+          const errorText = await jobsRes.text();
+          console.error('Jobs error:', errorText);
+          throw new Error(`Failed to fetch jobs: ${jobsRes.status} - ${errorText}`);
+        }
         const jobsData = await jobsRes.json();
-        const userJobs = (jobsData.jobs || []).filter(
-          (job: Job) => job.created_by === profileData.id
+        console.log('Jobs data received:', jobsData);
+        const userJobs = (jobsData.jobs || jobsData || []).filter(
+          (job: Job) => job.created_by === currentHrProfile.id
         );
+        console.log('Filtered user jobs:', userJobs);
         // Sort by most recent and take first 3
         userJobs.sort(
           (a: Job, b: Job) =>
@@ -272,12 +367,14 @@ export default function HRDashboard() {
               Welcome back, {hrProfile?.name || "HR"}! Here's your recruitment overview.
             </p>
           </div>
-          <Link href="/hr/jobs/new">
-            <Button className="bg-amber-600 hover:bg-amber-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 group">
-              <PlusCircle className="h-4 w-4 mr-2 group-hover:rotate-90 transition-transform duration-300" />
-              Post New Job
-            </Button>
-          </Link>
+          <div className="flex gap-2">
+            <Link href="/hr/jobs/new">
+              <Button className="bg-amber-600 hover:bg-amber-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 group">
+                <PlusCircle className="h-4 w-4 mr-2 group-hover:rotate-90 transition-transform duration-300" />
+                Post New Job
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {/* Error message */}
@@ -494,9 +591,14 @@ export default function HRDashboard() {
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <h3 className="font-medium text-stone-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
-                            Candidate #{applicant.candidate_id}
+                            {applicant.candidate_name}
                           </h3>
-                          <p className="text-sm text-stone-500 dark:text-stone-400 mt-0.5">
+                          {applicant.candidate_email && (
+                            <p className="text-xs text-stone-400 dark:text-stone-500 mt-0.5">
+                              {applicant.candidate_email}
+                            </p>
+                          )}
+                          <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
                             {applicant.job_title}
                           </p>
                           <div className="flex items-center gap-2 mt-2">

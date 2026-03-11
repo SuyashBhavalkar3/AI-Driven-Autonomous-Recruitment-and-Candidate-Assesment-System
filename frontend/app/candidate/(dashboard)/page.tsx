@@ -23,24 +23,91 @@ import {
   Loader2,
   Settings,
 } from "lucide-react";
-import { getUserData, getAuthToken } from "@/lib/auth";
+import { getUserData, getAuthToken, isAuthenticated } from "@/lib/auth";
 import { getCurrentUser, profileAPI } from "@/lib/api";
 import { ProfileCompletionCard } from "@/components/ProfileCompletionCard";
 import { calculateProfileCompletion } from "@/lib/profileCompletion";
 import Loader from "@/components/Loader";
 
-// Mock API functions – replace with actual endpoints
+// Real API functions using backend routes
 const fetchDashboardStats = async () => {
-  // Simulate API call
+  const token = getAuthToken();
+  if (!token) throw new Error("No authentication token");
+
+  const response = await fetch("http://localhost:8000/v1/candidate/dashboard/stats", {
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch dashboard stats");
+  }
+
+  const data = await response.json();
+  
+  // Transform backend data to match UI format
   return [
-    { label: "Applications", value: 12, change: "+2 this week", icon: FileText },
-    { label: "In Progress", value: 5, change: "3 interviews", icon: Briefcase },
-    { label: "Interviews", value: 2, change: "1 upcoming", icon: Bell },
-    { label: "Offers", value: 1, change: "pending response", icon: Award },
+    { 
+      label: "Applications", 
+      value: data.total_applications, 
+      change: `${data.recent_30d} in last 30 days`, 
+      icon: FileText 
+    },
+    { 
+      label: "In Progress", 
+      value: data.in_progress, 
+      change: "active processes", 
+      icon: Briefcase 
+    },
+    { 
+      label: "Notifications", 
+      value: data.unread_notifications, 
+      change: "unread messages", 
+      icon: Bell 
+    },
+    { 
+      label: "Offers", 
+      value: data.offers_received, 
+      change: "received", 
+      icon: Award 
+    },
   ];
 };
 
+const fetchRecentActivity = async () => {
+  const token = getAuthToken();
+  if (!token) throw new Error("No authentication token");
+
+  const response = await fetch("http://localhost:8000/v1/candidate/dashboard/activity?limit=5", {
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch activity data");
+  }
+
+  const data = await response.json();
+  
+  // Transform activity data for display
+  return data.map((activity: any) => ({
+    id: activity.id,
+    title: activity.job_title,
+    company: "Company", // You might need to add company info to the backend response
+    status: activity.status,
+    date: new Date(activity.updated_at).toLocaleDateString(),
+    resumeScore: activity.resume_score,
+    assessmentScore: activity.assessment_score
+  }));
+};
+
 const fetchRecommendedJobs = async () => {
+  // This would need a separate endpoint for job recommendations
+  // For now, return empty array or mock data until endpoint is created
   return [
     { id: 1, title: "Senior Frontend Developer", company: "TechCorp", location: "Remote", match: 92 },
     { id: 2, title: "Full Stack Engineer", company: "InnovateLabs", location: "New York", match: 85 },
@@ -49,6 +116,8 @@ const fetchRecommendedJobs = async () => {
 };
 
 const fetchUpcomingInterviews = async () => {
+  // This would need a separate endpoint for upcoming interviews
+  // For now, return empty array or mock data until endpoint is created
   return [
     { id: 1, company: "TechCorp", position: "Frontend Developer", date: "Tomorrow, 2:00 PM", type: "Technical" },
     { id: 2, company: "InnovateLabs", position: "Full Stack", date: "Mar 12, 11:00 AM", type: "HR" },
@@ -65,13 +134,22 @@ export default function CandidateDashboard() {
   const [stats, setStats] = useState<any[]>([]);
   const [jobs, setJobs] = useState<any[]>([]);
   const [interviews, setInterviews] = useState<any[]>([]);
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const statsRef = useRef<HTMLDivElement>(null);
   const jobsRef = useRef<HTMLDivElement>(null);
   const [particles, setParticles] = useState<React.ReactNode[]>([]);
 
   // Load user data from auth
   useEffect(() => {
+    // Check authentication first
+    if (!isAuthenticated()) {
+      setError("Please log in to view your dashboard");
+      setLoading(false);
+      return;
+    }
+    
     const stored = getUserData();
     if (stored) setUserData(stored);
   }, []);
@@ -80,14 +158,54 @@ export default function CandidateDashboard() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [statsData, jobsData, interviewsData] = await Promise.all([
-          fetchDashboardStats(),
-          fetchRecommendedJobs(),
-          fetchUpcomingInterviews(),
+        setLoading(true);
+        setError(null);
+        
+        // Check authentication
+        if (!isAuthenticated()) {
+          setError("Please log in to view your dashboard");
+          setLoading(false);
+          return;
+        }
+        
+        const token = getAuthToken();
+        if (!token) {
+          setError("Authentication token not found. Please log in again.");
+          setLoading(false);
+          return;
+        }
+
+        // Fetch real data from backend
+        const [statsData, activityData, jobsData, interviewsData] = await Promise.all([
+          fetchDashboardStats().catch(err => {
+            console.error('Stats fetch error:', err);
+            return [];
+          }),
+          fetchRecentActivity().catch(err => {
+            console.error('Activity fetch error:', err);
+            return [];
+          }),
+          fetchRecommendedJobs().catch(err => {
+            console.error('Jobs fetch error:', err);
+            return [];
+          }),
+          fetchUpcomingInterviews().catch(err => {
+            console.error('Interviews fetch error:', err);
+            return [];
+          }),
         ]);
+        
         setStats(statsData);
+        setRecentActivity(activityData);
         setJobs(jobsData);
         setInterviews(interviewsData);
+        
+        console.log('Dashboard data loaded:', {
+          stats: statsData,
+          activity: activityData,
+          jobs: jobsData.length,
+          interviews: interviewsData.length
+        });
         
         // Fetch profile completion status from backend
         try {
@@ -135,6 +253,7 @@ export default function CandidateDashboard() {
         }
       } catch (error) {
         console.error("Failed to load dashboard data:", error);
+        setError("Failed to load dashboard data. Please try refreshing the page.");
       } finally {
         setLoading(false);
       }
@@ -210,6 +329,34 @@ export default function CandidateDashboard() {
 
   if (loading) {
     return <Loader fullPage={true} />;
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center max-w-md mx-auto">
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6">
+            <p className="text-red-600 dark:text-red-400 font-medium mb-2">Dashboard Access Error</p>
+            <p className="text-red-500 dark:text-red-400 text-sm mb-4">{error}</p>
+            <div className="flex gap-2 justify-center">
+              <Button 
+                onClick={() => window.location.reload()} 
+                className="bg-[#B8915C] hover:bg-[#9F7A4F]"
+              >
+                Retry
+              </Button>
+              <Button 
+                onClick={() => window.location.href = '/login'} 
+                variant="outline"
+                className="border-[#B8915C] text-[#B8915C] hover:bg-[#B8915C]/10"
+              >
+                Go to Login
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -334,41 +481,98 @@ export default function CandidateDashboard() {
           </div>
         </div>
 
-        {/* Right column – interviews & quick actions */}
+        {/* Right column – recent activity & quick actions */}
         <div className="space-y-6">
-          <h2 className="text-xl font-semibold text-[#2D2A24] dark:text-white">Upcoming</h2>
+          <h2 className="text-xl font-semibold text-[#2D2A24] dark:text-white">Recent Activity</h2>
           <Card className="border-none bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm shadow-lg">
             <CardContent className="p-4 space-y-3">
-              {interviews.map((interview) => (
-                <motion.div
-                  key={interview.id}
-                  className="interview-item"
-                  whileHover={{ x: 5 }}
-                  transition={{ type: "spring", stiffness: 400 }}
-                >
-                  <div className="p-3 bg-[#F1E9E0] dark:bg-slate-800/50 rounded-lg cursor-pointer">
-                    <div className="flex items-start gap-2">
-                      <div className="w-2 h-2 rounded-full mt-2 bg-[#B8915C]" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-[#2D2A24] dark:text-white">
-                          {interview.position} at {interview.company}
-                        </p>
-                        <p className="text-xs text-[#5A534A] dark:text-slate-400">
-                          {interview.type} Interview
-                        </p>
-                        <div className="flex items-center gap-1 mt-1">
-                          <Clock className="h-3 w-3 text-[#A69A8C]" />
-                          <p className="text-xs text-[#5A534A] dark:text-slate-400">
-                            {interview.date}
+              {recentActivity.length > 0 ? (
+                recentActivity.map((activity) => (
+                  <motion.div
+                    key={activity.id}
+                    className="interview-item"
+                    whileHover={{ x: 5 }}
+                    transition={{ type: "spring", stiffness: 400 }}
+                  >
+                    <div className="p-3 bg-[#F1E9E0] dark:bg-slate-800/50 rounded-lg cursor-pointer">
+                      <div className="flex items-start gap-2">
+                        <div className="w-2 h-2 rounded-full mt-2 bg-[#B8915C]" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-[#2D2A24] dark:text-white">
+                            {activity.title}
                           </p>
+                          <p className="text-xs text-[#5A534A] dark:text-slate-400">
+                            Status: {activity.status}
+                          </p>
+                          <div className="flex items-center gap-3 mt-1">
+                            <div className="flex items-center gap-1">
+                              <Clock className="h-3 w-3 text-[#A69A8C]" />
+                              <p className="text-xs text-[#5A534A] dark:text-slate-400">
+                                {activity.date}
+                              </p>
+                            </div>
+                            {activity.resumeScore && (
+                              <Badge className="bg-[#B8915C]/10 text-[#B8915C] border-none text-xs">
+                                {activity.resumeScore}% match
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                ))
+              ) : (
+                <div className="text-center py-6">
+                  <p className="text-sm text-[#5A534A] dark:text-slate-400">
+                    No recent activity found
+                  </p>
+                  <p className="text-xs text-[#A69A8C] mt-1">
+                    Start applying to jobs to see your activity here
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
+
+          {/* Upcoming Interviews */}
+          {interviews.length > 0 && (
+            <>
+              <h3 className="text-lg font-semibold text-[#2D2A24] dark:text-white">Upcoming Interviews</h3>
+              <Card className="border-none bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm shadow-lg">
+                <CardContent className="p-4 space-y-3">
+                  {interviews.map((interview) => (
+                    <motion.div
+                      key={interview.id}
+                      className="interview-item"
+                      whileHover={{ x: 5 }}
+                      transition={{ type: "spring", stiffness: 400 }}
+                    >
+                      <div className="p-3 bg-[#F1E9E0] dark:bg-slate-800/50 rounded-lg cursor-pointer">
+                        <div className="flex items-start gap-2">
+                          <div className="w-2 h-2 rounded-full mt-2 bg-green-500" />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-[#2D2A24] dark:text-white">
+                              {interview.position} at {interview.company}
+                            </p>
+                            <p className="text-xs text-[#5A534A] dark:text-slate-400">
+                              {interview.type} Interview
+                            </p>
+                            <div className="flex items-center gap-1 mt-1">
+                              <Clock className="h-3 w-3 text-[#A69A8C]" />
+                              <p className="text-xs text-[#5A534A] dark:text-slate-400">
+                                {interview.date}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </CardContent>
+              </Card>
+            </>
+          )}
 
           {/* Quick actions */}
           <Card className="border-none bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm shadow-lg">
@@ -384,6 +588,12 @@ export default function CandidateDashboard() {
                 <Button variant="outline" className="w-full justify-start border-[#D6CDC2] text-[#4A443C] hover:bg-[#F1E9E0]">
                   <Target className="h-4 w-4 mr-2 text-[#B8915C]" />
                   Track applications
+                </Button>
+              </Link>
+              <Link href="/candidate/resume">
+                <Button variant="outline" className="w-full justify-start border-[#D6CDC2] text-[#4A443C] hover:bg-[#F1E9E0]">
+                  <FileText className="h-4 w-4 mr-2 text-[#B8915C]" />
+                  Resume analysis
                 </Button>
               </Link>
               <Link href="/candidate/profile">
