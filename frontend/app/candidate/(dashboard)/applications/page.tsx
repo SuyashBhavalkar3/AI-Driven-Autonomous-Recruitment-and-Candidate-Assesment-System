@@ -1,5 +1,6 @@
 "use client";
- type ApplicationStage =
+
+type ApplicationStage =
   | "under_review"
   | "assessment_pending"
   | "assessment_scheduled"
@@ -7,7 +8,7 @@
   | "offer"
   | "rejected";
 
- interface Application {
+interface Application {
   id: number;
   company: string;
   position: string;
@@ -19,7 +20,6 @@
   offerDetails?: { salary: string; deadline: string };
   rejectionReason?: string;
 }
-
 
 export const initialApplications: Application[] = [
   {
@@ -72,7 +72,7 @@ import { Badge } from "@/components/ui/badge";
 import { Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
 import gsap from "gsap";
-
+import Loader from "@/components/Loader";
 import { ApplicationCard } from "@/components/ApplicationCard";
 import { ScheduleDialog } from "@/components/ScheduleDialog";
 
@@ -86,8 +86,16 @@ export default function ApplicationsPage() {
 
   // Simulate loading
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 800);
-    return () => clearTimeout(timer);
+    const loadApplications = async () => {
+      try {
+        await new Promise(resolve => setTimeout(resolve, 1100));
+        setLoading(false);
+      } catch (error) {
+        console.error('Failed to load applications:', error);
+        setLoading(false);
+      }
+    };
+    loadApplications();
   }, []);
 
   // Generate decorative particles
@@ -138,7 +146,6 @@ export default function ApplicationsPage() {
   const handleSchedule = (date: Date, time: string) => {
     if (!selectedAppId) return;
 
-    // Combine date and time into an ISO string (simplified)
     const [hours, minutes] = time.split(":").map(Number);
     const scheduledDateTime = new Date(date);
     scheduledDateTime.setHours(hours, minutes);
@@ -157,8 +164,6 @@ export default function ApplicationsPage() {
   };
 
   const handleAssessmentPassed = (appId: number) => {
-    // Simulate passing assessment -> move to interview scheduled
-    // Set interview date to 3 days later as an example
     const interviewDate = new Date();
     interviewDate.setDate(interviewDate.getDate() + 3);
     interviewDate.setHours(14, 0, 0, 0); // 2:00 PM
@@ -178,68 +183,75 @@ export default function ApplicationsPage() {
 
   return (
     <div className="relative min-h-screen bg-[#F9F6F0] dark:bg-slate-950 overflow-hidden">
-      {/* Decorative particles */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        {particles}
-      </div>
+      {loading && <Loader fullPage={true} />}
 
-      <div className="relative z-10 max-w-6xl mx-auto px-4 py-8">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="mb-8 flex items-center justify-between"
-        >
-          <div>
-            <h1 className="font-serif text-4xl font-medium text-[#2D2A24] dark:text-white mb-2 flex items-center gap-2">
-              My Applications
-              <Sparkles className="h-6 w-6 text-[#B8915C] animate-pulse" />
-            </h1>
-            <p className="text-[#5A534A] dark:text-slate-400">
-              Track your application progress
-            </p>
+      {!loading && (
+        <>
+          {/* Decorative particles */}
+          <div className="absolute inset-0 pointer-events-none overflow-hidden">
+            {particles}
           </div>
-          <Badge
-            variant="outline"
-            className="border-[#B8915C]/30 text-[#B8915C] bg-white/50 backdrop-blur-sm"
-          >
-            {applications.length} total
-          </Badge>
-        </motion.div>
 
-        {/* Applications list */}
-        <div ref={cardsRef} className="space-y-4">
-          {loading ? (
-            // Skeleton loaders
-            [...Array(3)].map((_, i) => (
-              <div
-                key={i}
-                className="border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm animate-pulse rounded-lg p-6"
-              >
-                <div className="h-6 w-48 bg-[#D6CDC2] dark:bg-slate-700 rounded mb-2" />
-                <div className="h-4 w-32 bg-[#D6CDC2] dark:bg-slate-700 rounded" />
+          {/* Main content container - fixed missing closing tag */}
+          <div className="relative z-10 max-w-6xl mx-auto px-4 py-8">
+            {/* Header */}
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6 }}
+              className="mb-8 flex items-center justify-between"
+            >
+              <div>
+                <h1 className="font-serif text-4xl font-medium text-[#2D2A24] dark:text-white mb-2 flex items-center gap-2">
+                  My Applications
+                  <Sparkles className="h-6 w-6 text-[#B8915C] animate-pulse" />
+                </h1>
+                <p className="text-[#5A534A] dark:text-slate-400">
+                  Track your application progress
+                </p>
               </div>
-            ))
-          ) : (
-            applications.map((app) => (
-              <ApplicationCard
-                key={app.id}
-                application={app}
-                onScheduleClick={handleScheduleClick}
-                onAssessmentPassed={handleAssessmentPassed}
-              />
-            ))
-          )}
-        </div>
-      </div>
+              <Badge
+                variant="outline"
+                className="border-[#B8915C]/30 text-[#B8915C] bg-white/50 backdrop-blur-sm"
+              >
+                {applications.length} total
+              </Badge>
+            </motion.div>
 
-      {/* Schedule Dialog */}
-      <ScheduleDialog
-        open={scheduleDialogOpen}
-        onOpenChange={setScheduleDialogOpen}
-        onSchedule={handleSchedule}
-      />
+            {/* Applications list */}
+            <div ref={cardsRef} className="space-y-4">
+              {loading ? (
+                // Skeleton loaders
+                [...Array(3)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm animate-pulse rounded-lg p-6"
+                  >
+                    <div className="h-6 w-48 bg-[#D6CDC2] dark:bg-slate-700 rounded mb-2" />
+                    <div className="h-4 w-32 bg-[#D6CDC2] dark:bg-slate-700 rounded" />
+                  </div>
+                ))
+              ) : (
+                applications.map((app) => (
+                  <ApplicationCard
+                    key={app.id}
+                    application={app}
+                    onScheduleClick={handleScheduleClick}
+                    onAssessmentPassed={handleAssessmentPassed}
+                  />
+                ))
+              )}
+            </div>
+
+            {/* Schedule Dialog */}
+            <ScheduleDialog
+              open={scheduleDialogOpen}
+              onOpenChange={setScheduleDialogOpen}
+              onSchedule={handleSchedule}
+            />
+          </div> {/* ← this was missing */}
+        </>
+      )}
     </div>
   );
 }

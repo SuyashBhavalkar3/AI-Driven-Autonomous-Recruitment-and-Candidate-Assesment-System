@@ -14,6 +14,7 @@ class Candidate(Base):
     parsed_data = Column(JSON, nullable=True)
     profile_completed = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
 
     user = relationship("User", back_populates="resumes")
     experiences = relationship("Experience", back_populates="candidate", cascade="all, delete")
