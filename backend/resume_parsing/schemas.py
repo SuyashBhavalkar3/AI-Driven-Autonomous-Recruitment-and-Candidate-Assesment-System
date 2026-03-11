@@ -47,9 +47,12 @@ class ResumeCreate(BaseModel):
 
 class EducationSchema(BaseModel):
     id: int
-    degree: Optional[str]
     institution: Optional[str]
-    graduation_date: Optional[str]
+    degree: Optional[str]
+    field_of_study: Optional[str]
+    start_date: Optional[str]
+    end_date: Optional[str]
+    grade: Optional[str]
     marks: Optional[str]
     location: Optional[str]
 
@@ -60,11 +63,13 @@ class EducationSchema(BaseModel):
 class ExperienceSchema(BaseModel):
     id: int
     company_name: Optional[str]
-    title: Optional[str]
+    job_title: Optional[str]
+    location: Optional[str]
     start_date: Optional[str]
     end_date: Optional[str]
-    location: Optional[str]
-    responsibilities: Optional[str]
+    is_current: Optional[bool]
+    description: Optional[str]
+    # responsibilities: Optional[str]
 
     class Config:
         from_attributes = True
