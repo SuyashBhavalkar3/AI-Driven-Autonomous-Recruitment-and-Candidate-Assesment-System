@@ -7,12 +7,15 @@ bcrypt==3.2.2
 python-dotenv
 pydantic[email]
 pyJWT
+cloudinary
+groq 
 openai
 pydub
 aiofiles
 websockets
 requests
 gtts
-cloudinary
+python-dotenv
+cloudinary 
 pdfminer.six
 python-docx

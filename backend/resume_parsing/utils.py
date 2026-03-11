@@ -79,7 +79,7 @@ def parse_resume(file,file_path):
         raise
 
 from sqlalchemy.orm import Session
-from candidate_profile.models import Skill, Education, Experience, Project
+from resume_parsing.models import Education, Experience, Project, Skill, Certification
 
 def save_parsed_data(db: Session, candidate_id: int, parsed_data: dict):
     """
@@ -87,61 +87,69 @@ def save_parsed_data(db: Session, candidate_id: int, parsed_data: dict):
     into its respective table linked to the candidate.
     """
     try:
-        # --- Education (can be single or list) ---
-        edu_data = parsed_data.get("education", [])
-        if isinstance(edu_data, dict):
-            edu_data = [edu_data]
-        
-        for edu in edu_data:
-            if edu and any(edu.values()):
-                db.add(Education(
-                    candidate_id=candidate_id,
-                    institution=edu.get("institution", ""),
-                    degree=edu.get("degree", ""),
-                    field_of_study=edu.get("field_of_study"),
-                    start_date=edu.get("start_date", ""),
-                    end_date=edu.get("end_date"),
-                    grade=edu.get("grade"),
-                ))
+        # --- Education (single object in your schema) ---
+        edu = parsed_data.get("education", {})
+        if edu and any(edu.values()):
+            db.add(Education(
+                candidate_id=candidate_id,
+                degree=edu.get("degree"),
+                institution=edu.get("institution"),
+                graduation_date=edu.get("graduation_date"),
+                location=edu.get("location"),
+                marks=edu.get("marks"),
+            ))
 
-        # --- Experience (can be single or list) ---
-        exp_data = parsed_data.get("experience", [])
-        if isinstance(exp_data, dict):
-            exp_data = [exp_data]
-        
-        for exp in exp_data:
-            if exp and any(exp.values()):
+        # --- Experience (single object — wrap in list for flexibility) ---
+        exp_data = parsed_data.get("experience", {})
+        if exp_data and any(exp_data.values()):
+            # Handle both single dict and list
+            experiences = exp_data if isinstance(exp_data, list) else [exp_data]
+            for exp in experiences:
                 db.add(Experience(
                     candidate_id=candidate_id,
-                    company_name=exp.get("company_name", ""),
-                    job_title=exp.get("job_title", ""),
-                    location=exp.get("location"),
-                    start_date=exp.get("start_date", ""),
+                    company_name=exp.get("company_name"),
+                    title=exp.get("title"),
+                    start_date=exp.get("start_date"),
                     end_date=exp.get("end_date"),
-                    is_current=exp.get("is_current", False),
-                    description=exp.get("description"),
+                    location=exp.get("location"),
+                    responsibilities=exp.get("responsibilities"),
                 ))
 
         # --- Projects (list) ---
         for proj in parsed_data.get("projects", []):
-            if proj.get("project_name"):
-                db.add(Project(
-                    candidate_id=candidate_id,
-                    project_name=proj.get("project_name", ""),
-                    description=proj.get("description"),
-                    github_url=proj.get("github_url"),
-                ))
+            db.add(Project(
+                candidate_id=candidate_id,
+                project_name=proj.get("project_name"),
+                description=proj.get("description"),
+                github_url=proj.get("github_url"),
+            ))
 
-        # --- Skills (list of skill objects) ---
-        skills_data = parsed_data.get("skills", [])
-        if isinstance(skills_data, list):
-            for skill in skills_data:
-                if isinstance(skill, dict) and skill.get("skill_name"):
-                    db.add(Skill(
-                        candidate_id=candidate_id,
-                        skill_name=skill.get("skill_name", ""),
-                        proficiency=skill.get("proficiency"),
-                    ))
+        # --- Skills (single object) ---
+        skills = parsed_data.get("skills", {})
+        if skills and any(skills.values()):
+            db.add(Skill(
+                candidate_id=candidate_id,
+                languages=skills.get("languages"),
+                backend_technologies=skills.get("backend_technologies"),
+                databases=skills.get("databases"),
+                ai_ml_frameworks=skills.get("ai_ml_frameworks"),
+                tools_platforms=skills.get("tools_platforms"),
+                core_competencies=skills.get("core_competencies"),
+            ))
+
+        # --- Certifications (string or list) ---
+        certs = parsed_data.get("certifications", "")
+        if isinstance(certs, str) and certs.strip():
+            # LLM sometimes returns comma-separated string
+            for cert in certs.split(","):
+                cert = cert.strip()
+                if cert:
+                    db.add(Certification(candidate_id=candidate_id, title=cert))
+        elif isinstance(certs, list):
+            for cert in certs:
+                title = cert if isinstance(cert, str) else cert.get("title", "")
+                if title:
+                    db.add(Certification(candidate_id=candidate_id, title=title))
 
         db.commit()
         print(f"[DEBUG] Successfully saved parsed data for candidate {candidate_id}")

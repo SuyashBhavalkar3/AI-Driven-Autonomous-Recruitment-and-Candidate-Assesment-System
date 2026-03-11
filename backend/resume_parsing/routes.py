@@ -6,7 +6,6 @@ import os, io
 from dotenv import load_dotenv
 from authentication.database import get_db
 from resume_parsing.models import Candidate
-from candidate_profile.models import Experience, Education, Skill, Project
 from resume_parsing.schemas import ResumeResponse
 from authentication.utils import get_current_user
 from resume_parsing.utils import parse_resume

@@ -1,32 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from authentication.database import engine, Base, init_db
-
-# Import all models FIRST before any routes
-from authentication import models as auth_models
-from resume_parsing import models as resume_models
-from candidate_profile import models as candidate_models
-from job_management_module import models as job_models
-from applications import models as app_models
-from assessment import models as assessment_models
-from notifications import models as notif_models
-
-# Now import routes
 from ai_interview_bot.router import router as ai_router
 from ai_interview_bot.code_router import code_router
 from ai_interview_bot.tts_router import router as tts_router
+from authentication.database import engine, Base, init_db
 from authentication.routes import router as auth_router
 from resume_parsing.routes import router as resume_router
 from job_management_module.routes import router as jobs_router
-from applications.routes import router as applications_router
-from profile.routes import router as profile_router
-from candidate_profile.routes import router as candidate_router
-from scheduling.routes import router as scheduling_router
-from assessment.routes import router as assessment_router
-from candidate_dashboard.routes import router as candidate_dashboard_router
-from hr_dashboard.routes import router as hr_dashboard_router
-from hr_actions.routes import router as hr_actions_router
-from proctoring.routes import router as proctoring_router
+from ATS_score.route import router as ats_router
 
 Base.metadata.create_all(bind=engine)
 
@@ -46,42 +27,17 @@ app.add_middleware(
 
 @app.get("/")
 def read_root():
-    return {
-        "status": "AI Recruitment System Running",
-        "version": "2.0.0",
-        "endpoints": {
-            "auth": "/v1/auth",
-            "jobs": "/v1/jobs",
-            "applications": "/v1/applications",
-            "profile": "/v1/profile",
-            "candidate": "/v1/candidate",
-            "scheduling": "/v1/scheduling",
-            "assessment": "/v1/assessment",
-            "candidate_dashboard": "/v1/candidate/dashboard",
-            "hr_dashboard": "/v1/hr/dashboard",
-            "hr_actions": "/v1/hr/actions",
-            "proctoring": "/v1/proctoring",
-            "resume": "/v1/resume",
-            "interview": "/interview"
-        }
-    }
+    return {"status": "ai interview backend running"}
 
-app.include_router(auth_router)
-app.include_router(jobs_router)
-app.include_router(applications_router)
-app.include_router(profile_router)
-app.include_router(candidate_router)
-app.include_router(scheduling_router)
-app.include_router(assessment_router)
-app.include_router(candidate_dashboard_router)
-app.include_router(hr_dashboard_router)
-app.include_router(hr_actions_router)
-app.include_router(proctoring_router)
-app.include_router(resume_router)
 app.include_router(ai_router)
+app.include_router(auth_router)
 app.include_router(code_router)
 app.include_router(tts_router)
+app.include_router(resume_router)
+app.include_router(jobs_router)
+app.include_router(ats_router)
 
+# Create tables on startup
 @app.on_event("startup")
 def on_startup():
     init_db()
