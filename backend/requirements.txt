@@ -19,3 +19,4 @@ python-dotenv
 cloudinary 
 pdfminer.six
 python-docx
+groq
