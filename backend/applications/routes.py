@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
+from datetime import datetime, timedelta
 from authentication.database import get_db
 from authentication.utils import get_current_user
 from authentication.models import User
@@ -18,7 +19,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Configuration
-RESUME_SCORE_THRESHOLD = 60  # Minimum score to proceed to assessment (0-100)
+RESUME_SCORE_THRESHOLD = 10  # Lowered for testing so the full candidate flow can be exercised
+ASSESSMENT_VALIDITY_HOURS = 72
 
 router = APIRouter(prefix="/v1/applications", tags=["Applications"], dependencies=[Depends(rate_limiter)])
 
@@ -291,8 +293,11 @@ async def apply_for_job(
                     )
                     db.add(question)
                 
-                # Update application status
+                # Mark assessment availability window once the candidate passes resume screening.
                 new_application.status = ApplicationStatus.ASSESSMENT_SCHEDULED
+                available_at = datetime.utcnow()
+                new_application.assessment_available_at = available_at
+                new_application.assessment_expires_at = available_at + timedelta(hours=ASSESSMENT_VALIDITY_HOURS)
                 db.commit()
                 db.refresh(new_application)
                 

@@ -1,180 +1,315 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
-import { Clock, CheckCircle, AlertTriangle, Send, AlertCircle as AlertIcon } from "lucide-react";
-import { calculateProfileCompletion, UserProfile } from "@/lib/profileCompletion";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  AlertCircle as AlertIcon,
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  Loader2,
+  Send,
+} from "lucide-react";
 
-// Mock user profile - replace with actual data from backend
-const mockUserProfile: UserProfile = {
-  fullName: "John Doe",
-  email: "john@example.com",
-  phone: "",
-  location: "",
-  bio: "",
-  skills: [],
-  resume: "",
-  experiences: [],
+import {
+  applicationsAPI,
+  assessmentAPI,
+  AssessmentDSAQuestion,
+  AssessmentMCQQuestion,
+  AssessmentSubmitResponse,
+  profileAPI,
+} from "@/lib/api";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+
+type AssessmentQuestion =
+  | {
+      id: number;
+      type: "mcq";
+      title: string;
+      description: string;
+      points: number;
+      options: string[];
+    }
+  | {
+      id: number;
+      type: "coding";
+      title: string;
+      description: string;
+      points: number;
+      starterCode: string;
+    };
+
+const buildCodingPrompt = (question: AssessmentDSAQuestion) => {
+  const details = [
+    question.question_text,
+    question.example_input ? `Example input: ${question.example_input}` : null,
+    question.example_output ? `Example output: ${question.example_output}` : null,
+    question.constraints ? `Constraints: ${question.constraints}` : null,
+    question.expected_time_complexity
+      ? `Expected time complexity: ${question.expected_time_complexity}`
+      : null,
+    question.expected_space_complexity
+      ? `Expected space complexity: ${question.expected_space_complexity}`
+      : null,
+  ].filter(Boolean);
+
+  return details.join("\n\n");
 };
 
-const assessment = {
-  company: "TechCorp",
-  position: "Senior Frontend Developer",
-  duration: 3600,
-  questions: [
-    {
-      id: 1,
-      type: "coding",
-      title: "Implement a debounce function",
-      description: "Create a debounce function that delays the execution of a function until after a specified wait time has elapsed since the last time it was invoked.",
-      points: 30,
-      starterCode: `function debounce(func, wait) {\n  // Your code here\n}\n\n// Test\nconst log = debounce(() => console.log('Hello'), 1000);\nlog(); log(); log();`,
-    },
-    {
-      id: 2,
-      type: "coding",
-      title: "Binary Tree Level Order Traversal",
-      description: "Given the root of a binary tree, return the level order traversal of its nodes' values.",
-      points: 40,
-      starterCode: `function levelOrder(root) {\n  // Your code here\n}`,
-    },
-    {
-      id: 3,
-      type: "mcq",
-      title: "React Hooks",
-      description: "Which hook would you use to perform side effects in a functional component?",
-      options: ["useState", "useEffect", "useContext", "useMemo"],
-      points: 10,
-    },
-    {
-      id: 4,
-      type: "text",
-      title: "System Design",
-      description: "Explain how you would design a scalable URL shortener service. Include database design, caching, and handling high traffic.",
-      points: 20,
-    },
-  ],
+const normalizeQuestions = (
+  mcqQuestions: AssessmentMCQQuestion[],
+  dsaQuestions: AssessmentDSAQuestion[]
+): AssessmentQuestion[] => {
+  const normalizedMcq: AssessmentQuestion[] = mcqQuestions.map((question, index) => ({
+    id: question.id,
+    type: "mcq",
+    title: question.topic || `MCQ Question ${index + 1}`,
+    description: question.question_text,
+    points: question.marks,
+    options: [
+      question.option_a,
+      question.option_b,
+      question.option_c,
+      question.option_d,
+    ],
+  }));
+
+  const normalizedCoding: AssessmentQuestion[] = dsaQuestions.map((question, index) => ({
+    id: question.id,
+    type: "coding",
+    title: question.topic || `Coding Question ${index + 1}`,
+    description: buildCodingPrompt(question),
+    points: question.marks,
+    starterCode: "",
+  }));
+
+  return [...normalizedMcq, ...normalizedCoding];
 };
 
 export default function AssessmentPage() {
   const router = useRouter();
-  const [started, setStarted] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(assessment.duration);
-  const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [answers, setAnswers] = useState<Record<number, any>>({});
-  const [submitted, setSubmitted] = useState(false);
-  
-  // Check profile completion
-  const profileStatus = calculateProfileCompletion(mockUserProfile);
+  const searchParams = useSearchParams();
+  const applicationIdParam = searchParams.get("applicationId");
+  const applicationId = applicationIdParam ? Number(applicationIdParam) : null;
 
-  // Redirect if profile incomplete
+  const [profileCompleted, setProfileCompleted] = useState<boolean | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [started, setStarted] = useState(false);
+  const [startingAssessment, setStartingAssessment] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(3600);
+  const [currentQuestion, setCurrentQuestion] = useState(0);
+  const [answers, setAnswers] = useState<Record<number, string | number>>({});
+  const [submitted, setSubmitted] = useState(false);
+  const [submissionResult, setSubmissionResult] = useState<AssessmentSubmitResponse | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [applicationMeta, setApplicationMeta] = useState<{ company: string; position: string } | null>(null);
+  const [assessmentQuestions, setAssessmentQuestions] = useState<AssessmentQuestion[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
-    if (!profileStatus.isComplete) {
+    let mounted = true;
+
+    async function loadProfileStatus() {
+      try {
+        setLoadingProfile(true);
+        const status = await profileAPI.getCandidateStatus();
+
+        if (mounted) {
+          setProfileCompleted(status.profile_completed);
+        }
+      } catch (profileError) {
+        if (mounted) {
+          setError(
+            profileError instanceof Error
+              ? profileError.message
+              : "Failed to verify profile completion."
+          );
+          setProfileCompleted(false);
+        }
+      } finally {
+        if (mounted) {
+          setLoadingProfile(false);
+        }
+      }
+    }
+
+    loadProfileStatus();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadApplicationMeta() {
+      if (!applicationId) {
+        return;
+      }
+
+      try {
+        const detail = await applicationsAPI.getMyApplicationDetail(applicationId);
+        if (mounted) {
+          setApplicationMeta({
+            company: detail.job?.title || "Tech Company",
+            position: detail.job?.title || "Software Engineer",
+          });
+        }
+      } catch {
+        // Keep interview fallbacks if detail loading fails.
+      }
+    }
+
+    loadApplicationMeta();
+
+    return () => {
+      mounted = false;
+    };
+  }, [applicationId]);
+
+  useEffect(() => {
+    if (profileCompleted === false) {
       const timer = setTimeout(() => {
-        router.push('/candidate/profile');
+        router.push("/candidate/profile");
       }, 3000);
+
       return () => clearTimeout(timer);
     }
-  }, [profileStatus.isComplete, router]);
+  }, [profileCompleted, router]);
+
+  const questions = useMemo(() => assessmentQuestions, [assessmentQuestions]);
+  const question = questions[currentQuestion];
+
+  const formatTime = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const remainingSeconds = seconds % 60;
+    return `${hours}:${minutes.toString().padStart(2, "0")}:${remainingSeconds
+      .toString()
+      .padStart(2, "0")}`;
+  };
+
+  const handleStartAssessment = async () => {
+    if (!applicationId) {
+      setError("Missing application ID. Open the assessment from your application card.");
+      return;
+    }
+
+    try {
+      setStartingAssessment(true);
+      setError(null);
+
+      const response = await assessmentAPI.startAssessment(applicationId);
+      const normalizedQuestions = normalizeQuestions(
+        response.mcq_questions,
+        response.dsa_questions
+      );
+
+      setAssessmentQuestions(normalizedQuestions);
+      setStarted(true);
+      setTimeLeft(3600);
+      setCurrentQuestion(0);
+    } catch (startError) {
+      setError(
+        startError instanceof Error ? startError.message : "Failed to start assessment."
+      );
+    } finally {
+      setStartingAssessment(false);
+    }
+  };
+
+  const handleSubmit = useCallback(async () => {
+    if (!applicationId) {
+      setError("Missing application ID. Cannot submit assessment.");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setError(null);
+
+      const mcq_answers = questions
+        .filter((item): item is Extract<AssessmentQuestion, { type: "mcq" }> => item.type === "mcq")
+        .map((question) => ({
+          question_id: question.id,
+          selected_option: ["A", "B", "C", "D"][Number(answers[question.id] ?? 0)] || "A",
+        }));
+
+      const dsa_submissions = questions
+        .filter((item): item is Extract<AssessmentQuestion, { type: "coding" }> => item.type === "coding")
+        .map((question) => ({
+          question_id: question.id,
+          code: String(answers[question.id] ?? question.starterCode ?? ""),
+          language: "python3",
+        }));
+
+      const result = await assessmentAPI.submitAssessment(applicationId, {
+        mcq_answers,
+        dsa_submissions,
+      });
+
+      setSubmissionResult(result);
+      setSubmitted(true);
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error ? submitError.message : "Failed to submit assessment."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }, [applicationId, questions, answers]);
 
   useEffect(() => {
     if (started && !submitted && timeLeft > 0) {
-      const timer = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
+      const timer = setInterval(() => setTimeLeft((previous) => previous - 1), 1000);
       return () => clearInterval(timer);
-    } else if (timeLeft === 0 && started && !submitted) {
-      handleSubmit();
-    }
-  }, [started, submitted, timeLeft]);
-
-  const formatTime = (seconds: number) => {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-    return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-  };
-
-  const handleSubmit = () => {
-    if (!submitted) {
-      setSubmitted(true);
-    }
-  };
-
-  const question = assessment.questions[currentQuestion];
-
-  if (!started) {
-    // Show profile incomplete warning
-    if (!profileStatus.isComplete) {
-      return (
-        <div className="min-h-screen flex items-center justify-center">
-          <Card className="max-w-2xl w-full border-amber-200 dark:border-amber-800">
-            <CardHeader>
-              <CardTitle className="text-2xl flex items-center gap-2">
-                <AlertIcon className="h-6 w-6 text-amber-600" />
-                Complete Your Profile First
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="bg-amber-50 dark:bg-amber-950/30 p-4 rounded-lg">
-                <p className="text-amber-900 dark:text-amber-300 mb-4">
-                  You need to complete your profile (100%) before taking assessments. Redirecting to profile page in 3 seconds...
-                </p>
-                <div className="space-y-2">
-                  <p className="font-semibold text-amber-900 dark:text-amber-300">Missing Information:</p>
-                  <ul className="list-disc list-inside text-sm text-amber-800 dark:text-amber-400">
-                    {profileStatus.missingFields.map(field => (
-                      <li key={field}>{field}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <Link href="/candidate/profile" className="flex-1">
-                  <Button className="w-full">Complete Profile</Button>
-                </Link>
-                <Link href="/candidate/applications" className="flex-1">
-                  <Button variant="outline" className="w-full">Back to Applications</Button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      );
     }
 
+    if (timeLeft === 0 && started && !submitted && !submitting) {
+      void handleSubmit();
+    }
+  }, [handleSubmit, started, submitted, submitting, timeLeft]);
+
+  if (loadingProfile) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card className="max-w-2xl w-full border-slate-200 dark:border-slate-800">
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-[#B8915C]" />
+      </div>
+    );
+  }
+
+  if (profileCompleted === false) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Card className="w-full max-w-2xl border-amber-200 dark:border-amber-800">
           <CardHeader>
-            <CardTitle className="text-2xl">{assessment.position} - Assessment</CardTitle>
-            <p className="text-slate-600 dark:text-slate-400">{assessment.company}</p>
+            <CardTitle className="flex items-center gap-2 text-2xl">
+              <AlertIcon className="h-6 w-6 text-amber-600" />
+              Complete Your Profile First
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="bg-blue-50 dark:bg-blue-950/30 p-4 rounded-lg">
-              <h3 className="font-semibold text-blue-900 dark:text-blue-300 mb-2">Instructions</h3>
-              <ul className="space-y-2 text-sm text-blue-800 dark:text-blue-400">
-                <li>• Duration: {assessment.duration / 60} minutes</li>
-                <li>• {assessment.questions.length} questions (coding, MCQ, and text-based)</li>
-                <li>• Once started, the test cannot be paused</li>
-                <li>• You can only take this assessment once</li>
-                <li>• Auto-submits when time expires</li>
-              </ul>
-            </div>
-
-            <div className="bg-amber-50 dark:bg-amber-950/30 p-4 rounded-lg flex gap-3">
-              <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0" />
-              <p className="text-sm text-amber-800 dark:text-amber-400">
-                <strong>Important:</strong> Make sure you have a stable internet connection and are in a quiet environment before starting.
+            <div className="rounded-lg bg-amber-50 p-4 dark:bg-amber-950/30">
+              <p className="mb-4 text-amber-900 dark:text-amber-300">
+                Your backend profile status is still marked incomplete. Redirecting to your
+                profile page in 3 seconds...
               </p>
             </div>
-
-            <Button onClick={() => setStarted(true)} className="w-full h-12 text-lg">
-              Start Assessment
-            </Button>
+            <div className="flex gap-3">
+              <Link href="/candidate/profile" className="flex-1">
+                <Button className="w-full">Complete Profile</Button>
+              </Link>
+              <Link href="/candidate/applications" className="flex-1">
+                <Button variant="outline" className="w-full">
+                  Back to Applications
+                </Button>
+              </Link>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -183,17 +318,109 @@ export default function AssessmentPage() {
 
   if (submitted) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card className="max-w-lg w-full text-center border-slate-200 dark:border-slate-800">
+      <div className="flex min-h-screen items-center justify-center">
+        <Card className="w-full max-w-lg border-slate-200 text-center dark:border-slate-800">
           <CardContent className="p-12">
-            <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
               <CheckCircle className="h-10 w-10 text-green-600" />
             </div>
-            <h2 className="text-2xl font-bold mb-2">Assessment Submitted!</h2>
-            <p className="text-slate-600 dark:text-slate-400 mb-6">
-              Your answers are being evaluated. Results will be available within 24 hours.
+            <h2 className="mb-2 text-2xl font-bold">Assessment Submitted!</h2>
+            <p className="mb-6 text-slate-600 dark:text-slate-400">
+              Score: {submissionResult?.total_score ?? 0}/100
             </p>
-            <Button className="w-full">Back to Applications</Button>
+            {submissionResult?.qualifies_for_interview ? (
+              <div className="space-y-3">
+                <p className="text-sm text-[#B8915C]">
+                  Assessment cleared. You can start the AI interview now.
+                </p>
+                <Link
+                  href={`/candidate/interview?applicationId=${applicationId}&company=${encodeURIComponent(
+                    applicationMeta?.company || "Tech Company"
+                  )}&position=${encodeURIComponent(
+                    applicationMeta?.position || "Software Engineer"
+                  )}`}
+                >
+                  <Button className="w-full">Start AI Interview</Button>
+                </Link>
+              </div>
+            ) : (
+              <Link href="/candidate/applications">
+                <Button className="w-full">Back to Applications</Button>
+              </Link>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!started) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Card className="w-full max-w-2xl border-slate-200 dark:border-slate-800">
+          <CardHeader>
+            <CardTitle className="text-2xl">Assessment</CardTitle>
+            <p className="text-slate-600 dark:text-slate-400">
+              Application ID: {applicationId ?? "Unavailable"}
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="rounded-lg bg-blue-50 p-4 dark:bg-blue-950/30">
+              <h3 className="mb-2 font-semibold text-blue-900 dark:text-blue-300">
+                Instructions
+              </h3>
+              <ul className="space-y-2 text-sm text-blue-800 dark:text-blue-400">
+                <li>- Duration: 60 minutes</li>
+                <li>- Questions are loaded dynamically from the backend when you start</li>
+                <li>- Once started, the assessment cannot be paused</li>
+                <li>- Auto-submits when time expires</li>
+              </ul>
+            </div>
+
+            <div className="flex gap-3 rounded-lg bg-amber-50 p-4 dark:bg-amber-950/30">
+              <AlertTriangle className="h-5 w-5 flex-shrink-0 text-amber-600" />
+              <p className="text-sm text-amber-800 dark:text-amber-400">
+                Make sure your internet connection is stable before starting.
+              </p>
+            </div>
+
+            {error && (
+              <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">
+                {error}
+              </div>
+            )}
+
+            <Button
+              onClick={handleStartAssessment}
+              disabled={startingAssessment}
+              className="h-12 w-full text-lg"
+            >
+              {startingAssessment ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Starting...
+                </>
+              ) : (
+                "Start Assessment"
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!question) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Card className="w-full max-w-lg border-slate-200 dark:border-slate-800">
+          <CardContent className="space-y-4 p-8">
+            <p className="text-slate-600 dark:text-slate-400">
+              No assessment questions were returned for this application.
+            </p>
+            <Link href="/candidate/applications">
+              <Button>Back to Applications</Button>
+            </Link>
           </CardContent>
         </Card>
       </div>
@@ -202,13 +429,15 @@ export default function AssessmentPage() {
 
   return (
     <div className="min-h-screen">
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-6">
+      <div className="mx-auto max-w-4xl px-4 py-8">
+        <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{assessment.position}</h1>
-            <p className="text-slate-600 dark:text-slate-400">{assessment.company}</p>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Assessment</h1>
+            <p className="text-slate-600 dark:text-slate-400">
+              Application ID: {applicationId}
+            </p>
           </div>
-          <div className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-900 rounded-lg border">
+          <div className="flex items-center gap-2 rounded-lg border bg-white px-4 py-2 dark:bg-slate-900">
             <Clock className={`h-5 w-5 ${timeLeft < 300 ? "text-red-500" : "text-blue-600"}`} />
             <span className={`font-mono font-semibold ${timeLeft < 300 ? "text-red-500" : ""}`}>
               {formatTime(timeLeft)}
@@ -216,15 +445,15 @@ export default function AssessmentPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 mb-6">
-          {assessment.questions.map((_, index) => (
+        <div className="mb-6 flex items-center gap-2">
+          {questions.map((item, index) => (
             <button
-              key={index}
+              key={item.id}
               onClick={() => setCurrentQuestion(index)}
-              className={`flex-1 h-2 rounded-full transition-colors ${
+              className={`h-2 flex-1 rounded-full transition-colors ${
                 index === currentQuestion
                   ? "bg-blue-600"
-                  : answers[assessment.questions[index].id]
+                  : answers[item.id] !== undefined
                   ? "bg-green-500"
                   : "bg-slate-200 dark:bg-slate-700"
               }`}
@@ -236,37 +465,43 @@ export default function AssessmentPage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <div className="flex items-center gap-2 mb-2">
+                <div className="mb-2 flex items-center gap-2">
                   <Badge variant="outline">{question.type.toUpperCase()}</Badge>
                   <Badge variant="secondary">{question.points} points</Badge>
                 </div>
                 <CardTitle className="text-xl">{question.title}</CardTitle>
               </div>
               <span className="text-sm text-slate-500">
-                {currentQuestion + 1} / {assessment.questions.length}
+                {currentQuestion + 1} / {questions.length}
               </span>
             </div>
-            <p className="text-slate-600 dark:text-slate-400 mt-2">{question.description}</p>
+            <p className="mt-2 whitespace-pre-wrap text-slate-600 dark:text-slate-400">
+              {question.description}
+            </p>
           </CardHeader>
           <CardContent>
             {question.type === "coding" && (
               <Textarea
-                value={answers[question.id] || question.starterCode}
-                onChange={(e) => setAnswers({ ...answers, [question.id]: e.target.value })}
-                className="font-mono text-sm min-h-[350px] bg-slate-50 dark:bg-slate-900"
+                value={String(answers[question.id] ?? question.starterCode)}
+                onChange={(event) =>
+                  setAnswers((current) => ({ ...current, [question.id]: event.target.value }))
+                }
+                className="min-h-[350px] bg-slate-50 font-mono text-sm dark:bg-slate-900"
               />
             )}
 
             {question.type === "mcq" && (
               <div className="space-y-3">
-                {question.options?.map((option, index) => (
+                {question.options.map((option, index) => (
                   <button
-                    key={index}
-                    onClick={() => setAnswers({ ...answers, [question.id]: index })}
-                    className={`w-full text-left p-4 rounded-lg border-2 transition-colors ${
+                    key={option}
+                    onClick={() =>
+                      setAnswers((current) => ({ ...current, [question.id]: index }))
+                    }
+                    className={`w-full rounded-lg border-2 p-4 text-left transition-colors ${
                       answers[question.id] === index
                         ? "border-blue-600 bg-blue-50 dark:bg-blue-950/30"
-                        : "border-slate-200 dark:border-slate-800 hover:border-slate-300"
+                        : "border-slate-200 hover:border-slate-300 dark:border-slate-800"
                     }`}
                   >
                     {option}
@@ -274,19 +509,10 @@ export default function AssessmentPage() {
                 ))}
               </div>
             )}
-
-            {question.type === "text" && (
-              <Textarea
-                value={answers[question.id] || ""}
-                onChange={(e) => setAnswers({ ...answers, [question.id]: e.target.value })}
-                className="min-h-[250px]"
-                placeholder="Type your answer here..."
-              />
-            )}
           </CardContent>
         </Card>
 
-        <div className="flex items-center justify-between mt-6">
+        <div className="mt-6 flex items-center justify-between">
           <Button
             variant="outline"
             onClick={() => setCurrentQuestion(Math.max(0, currentQuestion - 1))}
@@ -294,12 +520,25 @@ export default function AssessmentPage() {
           >
             Previous
           </Button>
-          {currentQuestion < assessment.questions.length - 1 ? (
+          {currentQuestion < questions.length - 1 ? (
             <Button onClick={() => setCurrentQuestion(currentQuestion + 1)}>Next</Button>
           ) : (
-            <Button onClick={handleSubmit} className="bg-green-600 hover:bg-green-700">
-              <Send className="h-4 w-4 mr-2" />
-              Submit Assessment
+            <Button
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Submitting
+                </>
+              ) : (
+                <>
+                  <Send className="mr-2 h-4 w-4" />
+                  Submit Assessment
+                </>
+              )}
             </Button>
           )}
         </div>

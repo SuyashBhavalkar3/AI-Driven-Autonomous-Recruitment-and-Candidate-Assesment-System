@@ -99,6 +99,8 @@ export interface HRApplication {
   interview_score: number | null;
   final_score: number | null;
   hr_notes?: string | null;
+  assessment_available_at?: string | null;
+  assessment_expires_at?: string | null;
   created_at: string;
 }
 
@@ -121,6 +123,92 @@ export interface CreateHRJobPayload {
   experience_required: number;
   location: string;
   salary_range: string;
+}
+
+export interface CandidateProfileStatus {
+  profile_completed: boolean;
+  resume_uploaded?: boolean;
+  has_experience?: boolean;
+  has_education?: boolean;
+  has_skills?: boolean;
+}
+
+export interface AssessmentMCQQuestion {
+  id: number;
+  question_text: string;
+  option_a: string;
+  option_b: string;
+  option_c: string;
+  option_d: string;
+  topic?: string | null;
+  difficulty?: string | null;
+  marks: number;
+}
+
+export interface AssessmentDSAQuestion {
+  id: number;
+  question_text: string;
+  topic?: string | null;
+  difficulty?: string | null;
+  example_input?: string | null;
+  example_output?: string | null;
+  expected_time_complexity?: string | null;
+  expected_space_complexity?: string | null;
+  constraints?: string | null;
+  marks: number;
+}
+
+export interface AssessmentStartResponse {
+  id: number;
+  application_id: number;
+  mcq_questions: AssessmentMCQQuestion[];
+  dsa_questions: AssessmentDSAQuestion[];
+  started_at?: string | null;
+  completed: boolean;
+}
+
+export interface AssessmentSubmitRequest {
+  mcq_answers: Array<{
+    question_id: number;
+    selected_option: string;
+  }>;
+  dsa_submissions: Array<{
+    question_id: number;
+    code: string;
+    language: string;
+  }>;
+}
+
+export interface AssessmentSubmitResponse {
+  id: number;
+  application_id: number;
+  mcq_score: number;
+  dsa_score: number;
+  total_score: number;
+  mcq_correct: number;
+  total_mcq: number;
+  dsa_test_cases_passed: number;
+  total_dsa_test_cases: number;
+  qualifies_for_interview: boolean;
+  next_status?: string | null;
+  completed_at?: string | null;
+}
+
+export interface CandidateJob {
+  id: number;
+  title: string;
+  description?: string | null;
+  required_skills?: string[] | null;
+  experience_required?: number | null;
+  location?: string | null;
+  salary_range?: string | null;
+  created_by: number;
+  created_at: string;
+}
+
+export interface CandidateJobsResponse {
+  total_jobs: number;
+  jobs: CandidateJob[];
 }
 
 export async function registerUser(data: RegisterData): Promise<UserData> {
@@ -202,6 +290,14 @@ const getAuthHeaders = (): Record<string, string> => {
 
 // Profile API
 export const profileAPI = {
+  getCandidateStatus: async (): Promise<CandidateProfileStatus> => {
+    const res = await fetch(`${API_BASE_URL}/v1/candidate/profile-status`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to fetch candidate profile status');
+    return res.json();
+  },
+
   getStatus: async () => {
     const res = await fetch(`${API_BASE_URL}/api/profile/status`, {
       headers: getAuthHeaders(),
@@ -293,7 +389,7 @@ export const dashboardAPI = {
 
 export const hrAPI = {
   getJobs: async (): Promise<HRJobsResponse> => {
-    const res = await fetch(`${API_BASE_URL}/v1/jobs/`, {
+    const res = await fetch(`${API_BASE_URL}/jobs/`, {
       headers: getAuthHeaders(),
     });
     if (!res.ok) throw new Error('Failed to fetch jobs');
@@ -352,6 +448,80 @@ export const hrAPI = {
       body: JSON.stringify(payload),
     });
     if (!res.ok) throw new Error('Failed to update profile');
+    return res.json();
+  },
+};
+
+export const jobsAPI = {
+  getAllJobs: async (): Promise<CandidateJobsResponse> => {
+    const res = await fetch(`${API_BASE_URL}/jobs/`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to fetch jobs');
+    return res.json();
+  },
+};
+
+export const applicationsAPI = {
+  applyForJob: async (jobId: number): Promise<HRApplication> => {
+    const res = await fetch(`${API_BASE_URL}/v1/applications/apply`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ job_id: jobId }),
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error.detail || 'Failed to apply for job');
+    }
+    return res.json();
+  },
+
+  getMyApplications: async (): Promise<HRApplication[]> => {
+    const res = await fetch(`${API_BASE_URL}/v1/applications/my-applications`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to fetch applications');
+    return res.json();
+  },
+
+  getMyApplicationDetail: async (applicationId: number): Promise<HRApplicationDetail> => {
+    const res = await fetch(`${API_BASE_URL}/v1/applications/my-applications/${applicationId}`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error.detail || 'Failed to fetch application detail');
+    }
+    return res.json();
+  },
+};
+
+export const assessmentAPI = {
+  startAssessment: async (applicationId: number): Promise<AssessmentStartResponse> => {
+    const res = await fetch(`${API_BASE_URL}/v1/assessment/start/${applicationId}`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error.detail || 'Failed to start assessment');
+    }
+    return res.json();
+  },
+
+  submitAssessment: async (
+    applicationId: number,
+    payload: AssessmentSubmitRequest
+  ): Promise<AssessmentSubmitResponse> => {
+    const res = await fetch(`${API_BASE_URL}/v1/assessment/submit/${applicationId}`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error.detail || 'Failed to submit assessment');
+    }
     return res.json();
   },
 };

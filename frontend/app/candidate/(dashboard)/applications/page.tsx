@@ -1,245 +1,269 @@
 "use client";
- type ApplicationStage =
-  | "under_review"
-  | "assessment_pending"
-  | "assessment_scheduled"
-  | "interview_scheduled"
-  | "offer"
-  | "rejected";
 
- interface Application {
-  id: number;
-  company: string;
-  position: string;
-  location: string;
-  appliedDate: string;
-  stage: ApplicationStage;
-  interviewDate?: string;      // ISO string
-  assessmentDate?: string;     // ISO string (scheduled assessment)
-  offerDetails?: { salary: string; deadline: string };
-  rejectionReason?: string;
-}
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { AlertCircle, CheckCircle, Clock, FileText, Loader2, Sparkles } from "lucide-react";
 
-
-export const initialApplications: Application[] = [
-  {
-    id: 1,
-    company: "TechCorp",
-    position: "Senior Frontend Developer",
-    location: "Remote",
-    appliedDate: "2024-02-15",
-    stage: "assessment_pending",
-  },
-  {
-    id: 2,
-    company: "InnovateLabs",
-    position: "Full Stack Engineer",
-    location: "New York",
-    appliedDate: "2024-02-10",
-    stage: "interview_scheduled",
-    interviewDate: "2024-03-05T14:00:00",
-  },
-  {
-    id: 3,
-    company: "DataFlow Inc",
-    position: "Backend Developer",
-    location: "Austin",
-    appliedDate: "2024-02-20",
-    stage: "under_review",
-  },
-  {
-    id: 4,
-    company: "CloudTech",
-    position: "DevOps Engineer",
-    location: "Seattle",
-    appliedDate: "2024-02-08",
-    stage: "offer",
-    offerDetails: { salary: "$140k - $160k", deadline: "2024-03-10" },
-  },
-  {
-    id: 5,
-    company: "StartupXYZ",
-    position: "Frontend Developer",
-    location: "Remote",
-    appliedDate: "2024-02-18",
-    stage: "rejected",
-    rejectionReason: "Experience requirements not met",
-  },
-];
-
-import { useState, useEffect, useRef } from "react";
+import { applicationsAPI, jobsAPI, HRApplication, CandidateJob } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles } from "lucide-react";
-import { motion } from "framer-motion";
-import gsap from "gsap";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 
-import { ApplicationCard } from "@/components/ApplicationCard";
-import { ScheduleDialog } from "@/components/ScheduleDialog";
+type ApplicationWithJob = HRApplication & {
+  job?: CandidateJob;
+};
+
+const statusStyles: Record<string, string> = {
+  pending: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+  resume_screened: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+  assessment_scheduled:
+    "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
+  assessment_completed:
+    "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
+  interview_scheduled:
+    "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300",
+  interview_completed:
+    "bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300",
+  accepted: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+  rejected: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+};
+
+const formatStatus = (value: string) =>
+  value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+
+const isAssessmentWindowActive = (application: HRApplication) => {
+  if (application.status !== "assessment_scheduled") {
+    return false;
+  }
+
+  if (!application.assessment_expires_at) {
+    return false;
+  }
+
+  return new Date(application.assessment_expires_at).getTime() > Date.now();
+};
+
+const formatValidityNote = (application: HRApplication) => {
+  if (!application.assessment_expires_at) {
+    return "This test is valid for 72 hours.";
+  }
+
+  const expiresAt = new Date(application.assessment_expires_at);
+  return `This test is valid until ${expiresAt.toLocaleString()}.`;
+};
 
 export default function ApplicationsPage() {
-  const [applications, setApplications] = useState<Application[]>(initialApplications);
-  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
-  const [selectedAppId, setSelectedAppId] = useState<number | null>(null);
+  const [applications, setApplications] = useState<ApplicationWithJob[]>([]);
   const [loading, setLoading] = useState(true);
-  const [particles, setParticles] = useState<React.ReactNode[]>([]);
-  const cardsRef = useRef<HTMLDivElement>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Simulate loading
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 800);
-    return () => clearTimeout(timer);
+    let mounted = true;
+
+    async function loadApplications() {
+      try {
+        setLoading(true);
+        const [applicationList, jobsResponse] = await Promise.all([
+          applicationsAPI.getMyApplications(),
+          jobsAPI.getAllJobs(),
+        ]);
+
+        const jobsById = new Map<number, CandidateJob>(
+          jobsResponse.jobs.map((job) => [job.id, job])
+        );
+
+        if (mounted) {
+          setApplications(
+            applicationList.map((application) => ({
+              ...application,
+              job: jobsById.get(application.job_id),
+            }))
+          );
+        }
+      } catch (loadError) {
+        if (mounted) {
+          setError(
+            loadError instanceof Error ? loadError.message : "Failed to load applications."
+          );
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadApplications();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  // Generate decorative particles
-  useEffect(() => {
-    const newParticles: React.ReactNode[] = [];
-    for (let i = 0; i < 15; i++) {
-      const top = Math.random() * 100;
-      const left = Math.random() * 100;
-      newParticles.push(
-        <div
-          key={`dot-${i}`}
-          className="absolute w-1.5 h-1.5 rounded-full bg-[#B8915C]/10 dark:bg-[#B8915C]/5"
-          style={{ top: `${top}%`, left: `${left}%`, filter: "blur(1px)" }}
-        />
-      );
-    }
-    setParticles(newParticles);
-  }, []);
-
-  // GSAP animations
-  useEffect(() => {
-    if (!loading && cardsRef.current) {
-      const ctx = gsap.context(() => {
-        gsap.from(".application-card", {
-          y: 30,
-          opacity: 0,
-          duration: 0.8,
-          stagger: 0.15,
-          ease: "power3.out",
-        });
-        gsap.from(".stage-badge", {
-          scale: 0.8,
-          opacity: 0,
-          duration: 0.4,
-          stagger: 0.2,
-          delay: 0.5,
-        });
-      }, cardsRef);
-      return () => ctx.revert();
-    }
-  }, [loading]);
-
-  const handleScheduleClick = (appId: number) => {
-    setSelectedAppId(appId);
-    setScheduleDialogOpen(true);
-  };
-
-  const handleSchedule = (date: Date, time: string) => {
-    if (!selectedAppId) return;
-
-    // Combine date and time into an ISO string (simplified)
-    const [hours, minutes] = time.split(":").map(Number);
-    const scheduledDateTime = new Date(date);
-    scheduledDateTime.setHours(hours, minutes);
-
-    setApplications((prev) =>
-      prev.map((app) =>
-        app.id === selectedAppId
-          ? {
-              ...app,
-              stage: "assessment_scheduled",
-              assessmentDate: scheduledDateTime.toISOString(),
-            }
-          : app
-      )
-    );
-  };
-
-  const handleAssessmentPassed = (appId: number) => {
-    // Simulate passing assessment -> move to interview scheduled
-    // Set interview date to 3 days later as an example
-    const interviewDate = new Date();
-    interviewDate.setDate(interviewDate.getDate() + 3);
-    interviewDate.setHours(14, 0, 0, 0); // 2:00 PM
-
-    setApplications((prev) =>
-      prev.map((app) =>
-        app.id === appId
-          ? {
-              ...app,
-              stage: "interview_scheduled",
-              interviewDate: interviewDate.toISOString(),
-            }
-          : app
-      )
-    );
-  };
+  const sortedApplications = useMemo(() => {
+    return [...applications].sort((left, right) => {
+      return new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
+    });
+  }, [applications]);
 
   return (
-    <div className="relative min-h-screen bg-[#F9F6F0] dark:bg-slate-950 overflow-hidden">
-      {/* Decorative particles */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        {particles}
-      </div>
-
-      <div className="relative z-10 max-w-6xl mx-auto px-4 py-8">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="mb-8 flex items-center justify-between"
-        >
+    <div className="relative min-h-screen overflow-hidden bg-[#F9F6F0] dark:bg-slate-950">
+      <div className="relative z-10 mx-auto max-w-6xl px-4 py-8">
+        <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="font-serif text-4xl font-medium text-[#2D2A24] dark:text-white mb-2 flex items-center gap-2">
+            <h1 className="mb-2 flex items-center gap-2 font-serif text-4xl font-medium text-[#2D2A24] dark:text-white">
               My Applications
-              <Sparkles className="h-6 w-6 text-[#B8915C] animate-pulse" />
+              <Sparkles className="h-6 w-6 animate-pulse text-[#B8915C]" />
             </h1>
             <p className="text-[#5A534A] dark:text-slate-400">
-              Track your application progress
+              These records come directly from the backend applications table.
             </p>
           </div>
           <Badge
             variant="outline"
-            className="border-[#B8915C]/30 text-[#B8915C] bg-white/50 backdrop-blur-sm"
+            className="border-[#B8915C]/30 bg-white/50 text-[#B8915C] backdrop-blur-sm"
           >
-            {applications.length} total
+            {sortedApplications.length} total
           </Badge>
-        </motion.div>
+        </div>
 
-        {/* Applications list */}
-        <div ref={cardsRef} className="space-y-4">
+        {error && (
+          <Card className="mb-6 border-red-200 bg-red-50 dark:bg-red-950/30">
+            <CardContent className="flex items-start gap-3 p-4">
+              <AlertCircle className="mt-0.5 h-5 w-5 text-red-600" />
+              <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        <div className="space-y-4">
           {loading ? (
-            // Skeleton loaders
-            [...Array(3)].map((_, i) => (
-              <div
-                key={i}
-                className="border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm animate-pulse rounded-lg p-6"
+            Array.from({ length: 3 }).map((_, index) => (
+              <Card
+                key={index}
+                className="border-none bg-white/70 shadow-lg backdrop-blur-sm dark:bg-slate-900/70"
               >
-                <div className="h-6 w-48 bg-[#D6CDC2] dark:bg-slate-700 rounded mb-2" />
-                <div className="h-4 w-32 bg-[#D6CDC2] dark:bg-slate-700 rounded" />
-              </div>
+                <CardContent className="p-6">
+                  <Loader2 className="h-5 w-5 animate-spin text-[#B8915C]" />
+                </CardContent>
+              </Card>
             ))
+          ) : sortedApplications.length === 0 ? (
+            <Card className="border-none bg-white/70 shadow-lg backdrop-blur-sm dark:bg-slate-900/70">
+              <CardContent className="p-6 text-sm text-[#5A534A] dark:text-slate-400">
+                No applications found yet.
+              </CardContent>
+            </Card>
           ) : (
-            applications.map((app) => (
-              <ApplicationCard
-                key={app.id}
-                application={app}
-                onScheduleClick={handleScheduleClick}
-                onAssessmentPassed={handleAssessmentPassed}
-              />
+            sortedApplications.map((application) => (
+              <Card
+                key={application.id}
+                className="border-none bg-white/70 shadow-lg backdrop-blur-sm dark:bg-slate-900/70"
+              >
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="mb-2 flex items-center gap-3">
+                        <h3 className="text-lg font-semibold text-[#2D2A24] dark:text-white">
+                          {application.job?.title || `Job #${application.job_id}`}
+                        </h3>
+                        <Badge className={statusStyles[application.status] || statusStyles.pending}>
+                          {formatStatus(application.status)}
+                        </Badge>
+                      </div>
+
+                      <p className="text-sm text-[#5A534A] dark:text-slate-400">
+                        Application ID: {application.id}
+                      </p>
+
+                      <div className="mt-3 flex flex-wrap gap-4 text-sm text-[#5A534A] dark:text-slate-400">
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-4 w-4" />
+                          Applied {new Date(application.created_at).toLocaleDateString()}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <FileText className="h-4 w-4" />
+                          Resume Score:{" "}
+                          {application.resume_match_score !== null
+                            ? `${Math.round(application.resume_match_score)}%`
+                            : "Pending"}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <CheckCircle className="h-4 w-4" />
+                          Assessment:{" "}
+                          {application.assessment_score !== null
+                            ? `${Math.round(application.assessment_score)}%`
+                            : "Pending"}
+                        </span>
+                      </div>
+
+                      {application.job?.location && (
+                        <p className="mt-2 text-sm text-[#5A534A] dark:text-slate-400">
+                          {application.job.location}
+                        </p>
+                      )}
+
+                      {isAssessmentWindowActive(application) && (
+                        <p className="mt-3 text-sm text-[#B8915C]">
+                          This test is valid for 72 hours.
+                        </p>
+                      )}
+
+                      {application.status === "assessment_scheduled" &&
+                        !isAssessmentWindowActive(application) && (
+                          <p className="mt-3 text-sm text-red-600 dark:text-red-400">
+                            {application.assessment_expires_at
+                              ? `Assessment window expired on ${new Date(
+                                  application.assessment_expires_at
+                                ).toLocaleString()}.`
+                              : "Assessment window is unavailable."}
+                          </p>
+                        )}
+                    </div>
+
+                    <div className="flex gap-2">
+                      {isAssessmentWindowActive(application) && (
+                        <div className="flex flex-col items-end gap-2">
+                          <Link href={`/candidate/assessment?applicationId=${application.id}`}>
+                            <Button className="bg-[#B8915C] hover:bg-[#9F7A4F]">
+                              Start Assessment
+                            </Button>
+                          </Link>
+                          <p className="text-xs text-[#A69A8C]">{formatValidityNote(application)}</p>
+                        </div>
+                      )}
+                      {!isAssessmentWindowActive(application) &&
+                        application.status === "assessment_scheduled" && (
+                        <Link href={`/candidate/assessment?applicationId=${application.id}`}>
+                          <Button disabled className="bg-[#B8915C] hover:bg-[#B8915C]">
+                            Start Assessment
+                          </Button>
+                        </Link>
+                      )}
+                      {application.status === "interview_scheduled" && (
+                        <Link
+                          href={`/candidate/interview?applicationId=${application.id}&company=${encodeURIComponent(
+                            application.job?.title || "Tech Company"
+                          )}&position=${encodeURIComponent(
+                            application.job?.title || "Software Engineer"
+                          )}`}
+                        >
+                          <Button className="bg-[#B8915C] hover:bg-[#9F7A4F]">
+                            Start AI Interview
+                          </Button>
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             ))
           )}
         </div>
       </div>
-
-      {/* Schedule Dialog */}
-      <ScheduleDialog
-        open={scheduleDialogOpen}
-        onOpenChange={setScheduleDialogOpen}
-        onSchedule={handleSchedule}
-      />
     </div>
   );
 }

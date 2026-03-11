@@ -22,6 +22,8 @@ class ApplicationResponse(BaseModel):
     interview_score: Optional[float]
     final_score: Optional[float]
     hr_notes: Optional[str]
+    assessment_available_at: Optional[datetime] = None
+    assessment_expires_at: Optional[datetime] = None
     created_at: datetime
     
     class Config:

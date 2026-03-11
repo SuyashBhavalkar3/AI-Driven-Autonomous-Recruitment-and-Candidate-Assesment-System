@@ -21,12 +21,12 @@ from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
+INTERVIEW_THRESHOLD = 0  # Testing mode: every completed assessment can proceed to interview
 
 router = APIRouter(prefix="/v1/assessment", tags=["Assessment"], dependencies=[Depends(rate_limiter)])
 
 
-@router.get("/start/{application_id}", response_model=AssessmentStartResponse)
-async def start_assessment(
+async def _start_assessment(
     application_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -52,6 +52,28 @@ async def start_assessment(
     
     if not application:
         raise HTTPException(status_code=404, detail="Application not found")
+
+    if application.status != ApplicationStatus.ASSESSMENT_SCHEDULED:
+        raise HTTPException(
+            status_code=400,
+            detail="Assessment is not available for this application yet"
+        )
+
+    if not application.assessment_available_at or not application.assessment_expires_at:
+        raise HTTPException(
+            status_code=400,
+            detail="Assessment availability window has not been initialized"
+        )
+
+    now = datetime.utcnow()
+    available_at = application.assessment_available_at.replace(tzinfo=None) if application.assessment_available_at.tzinfo else application.assessment_available_at
+    expires_at = application.assessment_expires_at.replace(tzinfo=None) if application.assessment_expires_at.tzinfo else application.assessment_expires_at
+
+    if now < available_at:
+        raise HTTPException(status_code=400, detail="Assessment is not available yet")
+
+    if now > expires_at:
+        raise HTTPException(status_code=400, detail="Assessment link has expired")
     
     # Assessment should exist by this point (created during application)
     assessment = db.query(Assessment).filter(
@@ -123,6 +145,24 @@ async def start_assessment(
         started_at=assessment.started_at,
         completed=assessment.completed
     )
+
+
+@router.get("/start/{application_id}", response_model=AssessmentStartResponse)
+async def start_assessment_get(
+    application_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return await _start_assessment(application_id, current_user, db)
+
+
+@router.post("/start/{application_id}", response_model=AssessmentStartResponse)
+async def start_assessment_post(
+    application_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return await _start_assessment(application_id, current_user, db)
 
 
 @router.post("/submit/{application_id}", response_model=AssessmentResultResponse)
@@ -258,7 +298,12 @@ async def submit_assessment(
     
     # Update application
     application.assessment_score = total_score
-    application.status = ApplicationStatus.ASSESSMENT_COMPLETED
+    qualifies_for_interview = total_score >= INTERVIEW_THRESHOLD
+    application.status = (
+        ApplicationStatus.INTERVIEW_SCHEDULED
+        if qualifies_for_interview
+        else ApplicationStatus.ASSESSMENT_COMPLETED
+    )
     
     db.commit()
     db.refresh(assessment)
@@ -275,6 +320,8 @@ async def submit_assessment(
         total_mcq=total_mcq,
         dsa_test_cases_passed=dsa_test_cases_passed,
         total_dsa_test_cases=total_dsa_test_cases,
+        qualifies_for_interview=qualifies_for_interview,
+        next_status=application.status.value,
         completed_at=assessment.completed_at
     )
 
@@ -357,8 +404,8 @@ async def get_assessment_result(
             )
         )
     
-    # Calculate pass/fail (60% threshold = 60/100)
-    passed = assessment.total_score >= 60
+    # Testing mode: threshold relaxed to 0 so completed assessments can reach interview stage.
+    passed = assessment.total_score >= INTERVIEW_THRESHOLD
     
     return AssessmentFeedbackResponse(
         mcq_score=assessment.mcq_score or 0,

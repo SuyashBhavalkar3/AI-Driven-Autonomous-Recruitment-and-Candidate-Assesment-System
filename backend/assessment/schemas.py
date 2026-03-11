@@ -79,6 +79,8 @@ class AssessmentResultResponse(BaseModel):
     total_mcq: int
     dsa_test_cases_passed: int
     total_dsa_test_cases: int
+    qualifies_for_interview: bool = False
+    next_status: Optional[str] = None
     completed_at: Optional[datetime] = None
     
     class Config:

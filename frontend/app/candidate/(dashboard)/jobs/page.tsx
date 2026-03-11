@@ -1,196 +1,132 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Input } from "@/components/ui/input";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { motion } from "framer-motion";
+import {
+  AlertCircle,
+  Briefcase,
+  DollarSign,
+  Loader2,
+  MapPin,
+  Search,
+  Sparkles,
+} from "lucide-react";
+
+import { applicationsAPI, CandidateJob, jobsAPI } from "@/lib/api";
+import { useProfileStatus } from "@/hooks/useProfileStatus";
+import { enforceProfileCompletion } from "@/lib/profileEnforcement";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  MapPin,
-  Briefcase,
-  Clock,
-  DollarSign,
-  Search,
-  Building2,
-  CheckCircle2,
-  XCircle,
-  Loader2,
-  AlertCircle,
-  Sparkles,
-} from "lucide-react";
-import { calculateProfileCompletion, UserProfile } from "@/lib/profileCompletion";
-import { useProfileStatus } from "@/hooks/useProfileStatus";
-import { enforceProfileCompletion } from "@/lib/profileEnforcement";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import gsap from "gsap";
+import { Input } from "@/components/ui/input";
 
+type ApplyState =
+  | { status: "idle" }
+  | { status: "applying" }
+  | { status: "success"; applicationId: number; applicationStatus: string }
+  | { status: "error"; message: string };
 
-const jobs = [
-  {
-    id: 1,
-    title: "Senior Frontend Developer",
-    company: "TechCorp",
-    logo: "TC",
-    location: "San Francisco, CA",
-    workMode: "Remote",
-    salary: "$120k - $150k",
-    type: "Full-time",
-    posted: "2d ago",
-    description:
-      "We are looking for a senior frontend developer with React expertise to build next-generation web applications.",
-    skills: ["React", "TypeScript", "Tailwind", "Next.js"],
-    experience: "5+ years",
-  },
-  {
-    id: 2,
-    title: "Full Stack Engineer",
-    company: "InnovateLabs",
-    logo: "IL",
-    location: "New York, NY",
-    workMode: "Hybrid",
-    salary: "$130k - $160k",
-    type: "Full-time",
-    posted: "1w ago",
-    description:
-      "Join our team to build scalable applications that impact millions of users worldwide.",
-    skills: ["Node.js", "React", "PostgreSQL", "AWS"],
-    experience: "3-5 years",
-  },
-  {
-    id: 3,
-    title: "Backend Developer",
-    company: "DataFlow Inc",
-    logo: "DF",
-    location: "Austin, TX",
-    workMode: "On-site",
-    salary: "$110k - $140k",
-    type: "Full-time",
-    posted: "3d ago",
-    description:
-      "Build robust APIs and microservices for our data processing platform.",
-    skills: ["Python", "Django", "Redis", "Docker"],
-    experience: "4+ years",
-  },
-];
-
-type ApplicationStatus = "idle" | "applying" | "success" | "rejected";
+const formatStatus = (value: string) =>
+  value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 
 export default function JobsPage() {
-  const router = useRouter();
+  const [jobs, setJobs] = useState<CandidateJob[]>([]);
+  const [selectedJob, setSelectedJob] = useState<CandidateJob | null>(null);
+  const [applyState, setApplyState] = useState<ApplyState>({ status: "idle" });
   const [searchTerm, setSearchTerm] = useState("");
-  const [location, setLocation] = useState("");
-  const [jobType, setJobType] = useState("");
-  const [selectedJob, setSelectedJob] = useState<typeof jobs[0] | null>(null);
-  const [applicationStatus, setApplicationStatus] =
-    useState<ApplicationStatus>("idle");
-  const [coverLetter, setCoverLetter] = useState("");
-  const [matchScore, setMatchScore] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
-  const [particles, setParticles] = useState<React.ReactNode[]>([]);
-  const cardsRef = useRef<HTMLDivElement>(null);
+  const [error, setError] = useState<string | null>(null);
   const { profileStatus, loading: profileLoading } = useProfileStatus();
 
-
-  // Simulate loading
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(timer);
+    let mounted = true;
+
+    async function loadJobs() {
+      try {
+        setLoading(true);
+        const response = await jobsAPI.getAllJobs();
+
+        if (mounted) {
+          setJobs(response.jobs);
+        }
+      } catch (loadError) {
+        if (mounted) {
+          setError(loadError instanceof Error ? loadError.message : "Failed to load jobs.");
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadJobs();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  // Generate decorative particles
-  useEffect(() => {
-    const newParticles: React.ReactNode[] = [];
-    for (let i = 0; i < 15; i++) {
-      const top = Math.random() * 100;
-      const left = Math.random() * 100;
-      newParticles.push(
-        <div
-          key={`dot-${i}`}
-          className="absolute w-1.5 h-1.5 rounded-full bg-[#B8915C]/10 dark:bg-[#B8915C]/5"
-          style={{ top: `${top}%`, left: `${left}%`, filter: "blur(1px)" }}
-        />
+  const filteredJobs = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+
+    if (!query) {
+      return jobs;
+    }
+
+    return jobs.filter((job) => {
+      return (
+        job.title.toLowerCase().includes(query) ||
+        (job.description || "").toLowerCase().includes(query) ||
+        (job.location || "").toLowerCase().includes(query)
       );
-    }
-    setParticles(newParticles);
-  }, []);
+    });
+  }, [jobs, searchTerm]);
 
-  // GSAP entrance animations
-  useEffect(() => {
-    if (!loading && cardsRef.current) {
-      const ctx = gsap.context(() => {
-        gsap.from(".filter-card", {
-          y: -20,
-          opacity: 0,
-          duration: 0.6,
-          ease: "power3.out",
-        });
-        gsap.from(".job-card", {
-          y: 30,
-          opacity: 0,
-          duration: 0.8,
-          stagger: 0.15,
-          ease: "power3.out",
-        });
-      }, cardsRef);
-      return () => ctx.revert();
-    }
-  }, [loading]);
-
-
-  const filteredJobs = jobs.filter((job) => {
-    return (
-      job.title.toLowerCase().includes(searchTerm.toLowerCase()) &&
-      (location === "" ||
-        job.location.toLowerCase().includes(location.toLowerCase())) &&
-      (jobType === "" || jobType === "all" || job.type === jobType)
-    );
-  });
-
-  const handleApply = async (job: typeof jobs[0]) => {
+  const handleApply = async (job: CandidateJob) => {
     const canApply = await enforceProfileCompletion();
     if (!canApply) {
       return;
     }
+
     setSelectedJob(job);
-    setApplicationStatus("idle");
-    setCoverLetter("");
-    setMatchScore(null);
+    setApplyState({ status: "idle" });
   };
 
   const submitApplication = async () => {
-    setApplicationStatus("applying");
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    const score = Math.floor(Math.random() * 40) + 60;
-    setMatchScore(score);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setApplicationStatus(score >= 70 ? "success" : "rejected");
+    if (!selectedJob) {
+      return;
+    }
+
+    try {
+      setApplyState({ status: "applying" });
+      const application = await applicationsAPI.applyForJob(selectedJob.id);
+      setApplyState({
+        status: "success",
+        applicationId: application.id,
+        applicationStatus: application.status,
+      });
+    } catch (applyError) {
+      setApplyState({
+        status: "error",
+        message: applyError instanceof Error ? applyError.message : "Failed to apply for job.",
+      });
+    }
   };
 
   return (
-    <div className="relative min-h-screen bg-[#F9F6F0] dark:bg-slate-950 overflow-hidden">
-      {/* Decorative particles */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        {particles}
-      </div>
-
-      <div ref={cardsRef} className="relative z-10 max-w-6xl mx-auto px-4 py-8">
-        {/* Header */}
+    <div className="relative min-h-screen overflow-hidden bg-[#F9F6F0] dark:bg-slate-950">
+      <div className="relative z-10 mx-auto max-w-6xl px-4 py-8">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -198,76 +134,54 @@ export default function JobsPage() {
           className="mb-8 flex items-center justify-between"
         >
           <div>
-            <h1 className="font-serif text-4xl font-medium text-[#2D2A24] dark:text-white mb-2 flex items-center gap-2">
+            <h1 className="mb-2 flex items-center gap-2 font-serif text-4xl font-medium text-[#2D2A24] dark:text-white">
               Find Your Next Opportunity
-              <Sparkles className="h-6 w-6 text-[#B8915C] animate-pulse" />
+              <Sparkles className="h-6 w-6 animate-pulse text-[#B8915C]" />
             </h1>
             <p className="text-[#5A534A] dark:text-slate-400">
-              Discover roles that match your expertise
+              Browse live jobs from the backend and apply directly.
             </p>
           </div>
           <Badge
             variant="outline"
-            className="border-[#B8915C]/30 text-[#B8915C] bg-white/50 backdrop-blur-sm"
+            className="border-[#B8915C]/30 bg-white/50 text-[#B8915C] backdrop-blur-sm"
           >
             {filteredJobs.length} jobs found
           </Badge>
         </motion.div>
 
-        {/* Search/Filter Card */}
-        <Card className="filter-card mb-8 border-none bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl shadow-2xl border border-white/20">
+        <Card className="mb-8 border border-white/20 bg-white/70 shadow-2xl backdrop-blur-xl dark:bg-slate-900/70">
           <CardContent className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#A69A8C]" />
-                <Input
-                  placeholder="Job title or keyword"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 bg-white/50 dark:bg-slate-800/50 border-[#D6CDC2] focus:border-[#B8915C]"
-                />
-              </div>
-              <div className="relative">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#A69A8C]" />
-                <Input
-                  placeholder="Location"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  className="pl-10 bg-white/50 dark:bg-slate-800/50 border-[#D6CDC2] focus:border-[#B8915C]"
-                />
-              </div>
-              <Select value={jobType} onValueChange={setJobType}>
-                <SelectTrigger className="bg-white/50 dark:bg-slate-800/50 border-[#D6CDC2] focus:border-[#B8915C]">
-                  <SelectValue placeholder="Job type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="Full-time">Full-time</SelectItem>
-                  <SelectItem value="Part-time">Part-time</SelectItem>
-                  <SelectItem value="Contract">Contract</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#A69A8C]" />
+              <Input
+                placeholder="Search job title, description, or location"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                className="border-[#D6CDC2] bg-white/50 pl-10 focus:border-[#B8915C] dark:bg-slate-800/50"
+              />
             </div>
           </CardContent>
         </Card>
 
-        {/* Jobs List */}
+        {error && (
+          <Card className="mb-6 border-red-200 bg-red-50 dark:bg-red-950/30">
+            <CardContent className="flex items-start gap-3 p-4">
+              <AlertCircle className="mt-0.5 h-5 w-5 text-red-600" />
+              <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="space-y-4">
           {loading ? (
-            // Skeleton loaders
-            [...Array(3)].map((_, i) => (
+            Array.from({ length: 3 }).map((_, index) => (
               <Card
-                key={i}
-                className="border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm animate-pulse"
+                key={index}
+                className="border border-white/20 bg-white/70 shadow-2xl backdrop-blur-xl dark:bg-slate-900/70"
               >
                 <CardContent className="p-6">
-                  <div className="flex gap-4">
-                    <div className="w-12 h-12 rounded-lg bg-[#D6CDC2] dark:bg-slate-700" />
-                    <div className="flex-1 space-y-2">
-                      <div className="h-5 w-48 bg-[#D6CDC2] dark:bg-slate-700 rounded" />
-                      <div className="h-4 w-32 bg-[#D6CDC2] dark:bg-slate-700 rounded" />
-                    </div>
-                  </div>
+                  <Loader2 className="h-5 w-5 animate-spin text-[#B8915C]" />
                 </CardContent>
               </Card>
             ))
@@ -275,24 +189,23 @@ export default function JobsPage() {
             filteredJobs.map((job) => (
               <motion.div
                 key={job.id}
-                className="job-card"
                 whileHover={{ y: -2 }}
                 transition={{ type: "spring", stiffness: 400 }}
               >
-                <Card className="border-none bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl shadow-2xl border border-white/20 hover:shadow-2xl transition-all duration-300">
+                <Card className="border border-white/20 bg-white/70 shadow-2xl backdrop-blur-xl transition-all duration-300 hover:shadow-2xl dark:bg-slate-900/70">
                   <CardContent className="p-6">
                     <div className="flex gap-4">
-                      <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-[#B8915C] to-[#9F7A4F] flex items-center justify-center text-white font-semibold flex-shrink-0">
-                        {job.logo}
+                      <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#B8915C] to-[#9F7A4F] font-semibold text-white">
+                        {job.title.slice(0, 2).toUpperCase()}
                       </div>
-                      <div className="flex-1 min-w-0">
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex-1">
                             <h3 className="text-lg font-semibold text-[#2D2A24] dark:text-white">
                               {job.title}
                             </h3>
-                            <p className="text-[#5A534A] dark:text-slate-400 mt-1">
-                              {job.company}
+                            <p className="mt-1 text-sm text-[#5A534A] dark:text-slate-400">
+                              Job ID: {job.id}
                             </p>
                           </div>
                           <Button
@@ -303,35 +216,30 @@ export default function JobsPage() {
                             Apply
                           </Button>
                         </div>
-                        <div className="flex flex-wrap items-center gap-4 mt-3 text-sm text-[#5A534A] dark:text-slate-400">
+
+                        <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-[#5A534A] dark:text-slate-400">
                           <span className="flex items-center gap-1">
                             <MapPin className="h-4 w-4" />
-                            {job.location}
+                            {job.location || "Location not specified"}
                           </span>
-                          <Badge
-                            variant="secondary"
-                            className="bg-[#B8915C]/10 text-[#B8915C] border-none"
-                          >
-                            {job.workMode}
-                          </Badge>
                           <span className="flex items-center gap-1">
                             <DollarSign className="h-4 w-4" />
-                            {job.salary}
+                            {job.salary_range || "Salary not specified"}
                           </span>
                           <span className="flex items-center gap-1">
                             <Briefcase className="h-4 w-4" />
-                            {job.experience}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-4 w-4" />
-                            {job.posted}
+                            {job.experience_required
+                              ? `${job.experience_required}+ years`
+                              : "Experience flexible"}
                           </span>
                         </div>
-                        <p className="mt-3 text-[#5A534A] dark:text-slate-400 text-sm line-clamp-2">
-                          {job.description}
+
+                        <p className="mt-3 text-sm text-[#5A534A] dark:text-slate-400">
+                          {job.description || "No description provided."}
                         </p>
-                        <div className="flex flex-wrap gap-2 mt-3">
-                          {job.skills.map((skill) => (
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {(job.required_skills || []).map((skill) => (
                             <Badge
                               key={skill}
                               variant="outline"
@@ -351,168 +259,115 @@ export default function JobsPage() {
         </div>
       </div>
 
-      {/* Application Dialog */}
       <Dialog open={!!selectedJob} onOpenChange={() => setSelectedJob(null)}>
-        <DialogContent className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-white/20 max-w-lg">
+        <DialogContent className="max-w-lg border-white/20 bg-white/90 backdrop-blur-xl dark:bg-slate-900/90">
           <DialogHeader>
             <DialogTitle className="font-serif text-2xl text-[#2D2A24] dark:text-white">
               Apply for {selectedJob?.title}
             </DialogTitle>
           </DialogHeader>
 
-          <AnimatePresence mode="wait">
-            {/* Profile Incomplete Warning */}
-            {!profileLoading && profileStatus && !profileStatus.profile_completed && (
-              <motion.div
-                key="incomplete"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="space-y-4"
-              >
-                <div className="bg-amber-50/80 border border-amber-200 rounded-lg p-4">
-                  <div className="flex gap-3">
-                    <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <h4 className="font-semibold text-amber-900 mb-2">
-                        Complete Your Profile First
-                      </h4>
-                      <p className="text-sm text-amber-800 mb-3">
-                        You need to complete your profile before applying for jobs.
-                      </p>
-                    </div>
+          {!profileLoading && profileStatus && !profileStatus.profile_completed && (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-4">
+                <div className="flex gap-3">
+                  <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
+                  <div>
+                    <h4 className="mb-2 font-semibold text-amber-900">Complete Your Profile First</h4>
+                    <p className="text-sm text-amber-800">
+                      You need a completed profile before applying for jobs.
+                    </p>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <Link href="/complete-profile" className="flex-1">
-                    <Button className="w-full bg-[#B8915C] hover:bg-[#9F7A4F]">
-                      Complete Profile
+              </div>
+              <div className="flex gap-2">
+                <Link href="/complete-profile" className="flex-1">
+                  <Button className="w-full bg-[#B8915C] hover:bg-[#9F7A4F]">
+                    Complete Profile
+                  </Button>
+                </Link>
+                <Button
+                  variant="outline"
+                  onClick={() => setSelectedJob(null)}
+                  className="flex-1 border-[#D6CDC2]"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {!profileLoading && profileStatus && profileStatus.profile_completed && applyState.status === "idle" && (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-[#B8915C]/10 p-3 text-sm text-[#B8915C]">
+                This will create a real application record in the database and trigger backend
+                resume analysis.
+              </div>
+              <Button onClick={submitApplication} className="w-full bg-[#B8915C] hover:bg-[#9F7A4F]">
+                Submit Application
+              </Button>
+            </div>
+          )}
+
+          {applyState.status === "applying" && (
+            <div className="py-8 text-center">
+              <Loader2 className="mx-auto mb-4 h-12 w-12 animate-spin text-[#B8915C]" />
+              <h3 className="mb-2 text-lg font-semibold text-[#2D2A24] dark:text-white">
+                Creating your application
+              </h3>
+              <p className="text-sm text-[#5A534A] dark:text-slate-400">
+                Saving the application record and generating the next step.
+              </p>
+            </div>
+          )}
+
+          {applyState.status === "error" && (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">
+                {applyState.message}
+              </div>
+              <Button onClick={submitApplication} className="w-full bg-[#B8915C] hover:bg-[#9F7A4F]">
+                Try Again
+              </Button>
+            </div>
+          )}
+
+          {applyState.status === "success" && (
+            <div className="space-y-4 py-4 text-center">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
+                <Sparkles className="h-8 w-8 text-green-600" />
+              </div>
+              <div>
+                <h3 className="font-serif text-xl font-medium text-[#2D2A24] dark:text-white">
+                  Application Created
+                </h3>
+                <p className="mt-2 text-[#5A534A] dark:text-slate-400">
+                  Application ID: {applyState.applicationId}
+                </p>
+                <p className="text-sm text-[#B8915C]">
+                  Current status: {formatStatus(applyState.applicationStatus)}
+                </p>
+              </div>
+
+              <div className="flex gap-2">
+                <Link href="/candidate/applications" className="flex-1">
+                  <Button className="w-full bg-[#B8915C] hover:bg-[#9F7A4F]">
+                    View Applications
+                  </Button>
+                </Link>
+                {applyState.applicationStatus === "assessment_scheduled" && (
+                  <Link
+                    href={`/candidate/assessment?applicationId=${applyState.applicationId}`}
+                    className="flex-1"
+                  >
+                    <Button variant="outline" className="w-full border-[#D6CDC2]">
+                      Start Assessment
                     </Button>
                   </Link>
-                  <Button
-                    variant="outline"
-                    onClick={() => setSelectedJob(null)}
-                    className="flex-1 border-[#D6CDC2]"
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </motion.div>
-            )}
-
-            {!profileLoading && profileStatus && profileStatus.profile_completed && applicationStatus === "idle" && (
-              <motion.div
-                key="form"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="space-y-4"
-              >
-                <div>
-                  <label className="text-sm font-medium text-[#4A443C] mb-2 block">
-                    Cover Letter (Optional)
-                  </label>
-                  <Textarea
-                    placeholder="Why are you a great fit for this role?"
-                    value={coverLetter}
-                    onChange={(e) => setCoverLetter(e.target.value)}
-                    rows={5}
-                    className="bg-white/50 dark:bg-slate-800/50 border-[#D6CDC2] focus:border-[#B8915C]"
-                  />
-                </div>
-                <div className="bg-[#B8915C]/10 p-3 rounded-lg text-sm text-[#B8915C]">
-                  Your application will be reviewed by AI to match your experience
-                  with job requirements.
-                </div>
-                <Button
-                  onClick={submitApplication}
-                  className="w-full bg-[#B8915C] hover:bg-[#9F7A4F]"
-                >
-                  Submit Application
-                </Button>
-              </motion.div>
-            )}
-
-            {!profileLoading && profileStatus && profileStatus.profile_completed && applicationStatus === "applying" && (
-              <motion.div
-                key="applying"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="py-8 text-center"
-              >
-                <Loader2 className="h-12 w-12 animate-spin text-[#B8915C] mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-[#2D2A24] dark:text-white mb-2">
-                  Analyzing Your Profile
-                </h3>
-                <p className="text-[#5A534A] dark:text-slate-400 text-sm">
-                  Matching your experience with requirements...
-                </p>
-                {matchScore !== null && (
-                  <motion.p
-                    initial={{ scale: 0.8 }}
-                    animate={{ scale: 1 }}
-                    className="mt-4 text-lg font-semibold text-[#B8915C]"
-                  >
-                    Match Score: {matchScore}%
-                  </motion.p>
                 )}
-              </motion.div>
-            )}
-
-            {!profileLoading && profileStatus && profileStatus.profile_completed && applicationStatus === "success" && (
-              <motion.div
-                key="success"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="py-8 text-center"
-              >
-                <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <CheckCircle2 className="h-10 w-10 text-green-600" />
-                </div>
-                <h3 className="font-serif text-xl font-medium text-[#2D2A24] dark:text-white mb-2">
-                  Application Accepted!
-                </h3>
-                <p className="text-[#5A534A] dark:text-slate-400 mb-4">
-                  Match score: {matchScore}%
-                </p>
-                <div className="bg-[#B8915C]/10 p-3 rounded-lg mb-4 text-sm text-[#B8915C]">
-                  Next: Schedule your assessment test
-                </div>
-                <Button
-                  onClick={() => setSelectedJob(null)}
-                  className="w-full bg-[#B8915C] hover:bg-[#9F7A4F]"
-                >
-                  View Applications
-                </Button>
-              </motion.div>
-            )}
-
-            {!profileLoading && profileStatus && profileStatus.profile_completed && applicationStatus === "rejected" && (
-              <motion.div
-                key="rejected"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="py-8 text-center"
-              >
-                <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <XCircle className="h-10 w-10 text-red-600" />
-                </div>
-                <h3 className="font-serif text-xl font-medium text-[#2D2A24] dark:text-white mb-2">
-                  Application Not Matched
-                </h3>
-                <p className="text-[#5A534A] dark:text-slate-400 mb-4">
-                  Score: {matchScore}% (minimum 70% required)
-                </p>
-                <Button
-                  onClick={() => setSelectedJob(null)}
-                  variant="outline"
-                  className="w-full border-[#D6CDC2]"
-                >
-                  Browse More Jobs
-                </Button>
-              </motion.div>
-            )}
-          </AnimatePresence>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

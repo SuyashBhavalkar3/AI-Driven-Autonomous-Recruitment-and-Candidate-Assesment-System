@@ -35,6 +35,8 @@ class Application(Base):
     
     final_score = Column(Float, nullable=True)
     hr_notes = Column(String, nullable=True)
+    assessment_available_at = Column(DateTime(timezone=True), nullable=True)
+    assessment_expires_at = Column(DateTime(timezone=True), nullable=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

@@ -41,7 +41,7 @@ def read_root():
         "version": "2.0.0",
         "endpoints": {
             "auth": "/v1/auth",
-            "jobs": "/v1/jobs",
+            "jobs": "/jobs",
             "applications": "/v1/applications",
             "profile": "/v1/profile",
             "candidate": "/v1/candidate",
