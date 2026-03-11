@@ -190,14 +190,18 @@ export default function JobsPage() {
       (jobType === "all" || job.type === jobType)
     );
   });
-
-  const handleApply = (job: typeof jobs[0]) => {
-    // Removed early return – dialog opens even if profile incomplete
+const handleApply = (job: typeof jobs[0]) => {
+  if (profileStatus.isComplete) {
+    // Navigate to job detail page
+    router.push(`/jobs/${job.id}`);
+  } else {
+    // Open application dialog with warning
     setSelectedJob(job);
     setApplicationStatus("idle");
     setCoverLetter("");
     setMatchScore(null);
-  };
+  }
+};
 
   const submitApplication = async () => {
     setApplicationStatus("applying");
