@@ -26,6 +26,7 @@ interface PersonalInfoCardProps {
     location: string;
     bio: string;
     skills: string[];
+    linkedin_url: string;
   };
   setFormData: React.Dispatch<
     React.SetStateAction<{
@@ -35,6 +36,7 @@ interface PersonalInfoCardProps {
       location: string;
       bio: string;
       skills: string[];
+      linkedin_url: string;
     }>
   >;
   profilePhoto: string;
@@ -196,6 +198,26 @@ export default function PersonalInfoCard({
               <div className="flex items-center gap-2 text-[#2D2A24] dark:text-white">
                 <MapPin className="h-4 w-4 text-[#A69A8C]" />
                 {formData.location || "Not provided"}
+              </div>
+            )}
+          </div>
+
+          {/* LinkedIn URL */}
+          <div className="space-y-2 md:col-span-2">
+            <Label className="text-[#4A443C] dark:text-slate-300">LinkedIn URL</Label>
+            {isEditing ? (
+              <Input
+                value={formData.linkedin_url}
+                onChange={(e) => handleChange("linkedin_url", e.target.value)}
+                placeholder="https://linkedin.com/in/your-profile"
+                className="bg-white/50 dark:bg-slate-800/50 border-[#D6CDC2] focus:border-[#B8915C]"
+              />
+            ) : (
+              <div className="flex items-center gap-2 text-[#2D2A24] dark:text-white">
+                <svg className="h-4 w-4 text-[#A69A8C]" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                </svg>
+                {formData.linkedin_url || "Not provided"}
               </div>
             )}
           </div>
