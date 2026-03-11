@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, FileText, Plus, X, Loader2, AlertCircle, CheckCircle } from "lucide-react";
+import { Upload, FileText, Plus, X, Loader2, AlertCircle, CheckCircle, Camera } from "lucide-react";
 import { getAuthToken } from "@/lib/auth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
@@ -47,6 +47,15 @@ export default function CompleteProfile() {
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
+  // Profile information fields
+  const [phone, setPhone] = useState("");
+  const [linkedinUrl, setLinkedinUrl] = useState("");
+  const [githubUrl, setGithubUrl] = useState("");
+  const [bio, setBio] = useState("");
+  const [profilePhoto, setProfilePhoto] = useState<File | null>(null);
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
+  
+  // Profile data sections
   const [experiences, setExperiences] = useState<Experience[]>([]);
   const [education, setEducation] = useState<Education[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
@@ -66,6 +75,24 @@ export default function CompleteProfile() {
       opacity: 1,
       transition: { type: "spring" as const, stiffness: 300, damping: 24 },
     },
+  };
+
+  const handleProfilePhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (!["image/jpeg", "image/png", "image/jpg", "image/webp"].includes(file.type)) {
+        setError("Only JPEG, PNG, JPG and WEBP images are allowed");
+        return;
+      }
+      setProfilePhoto(file);
+      // Create preview URL
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setProfilePhotoUrl(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+      setError(null);
+    }
   };
 
   const handleResumeUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -172,6 +199,16 @@ export default function CompleteProfile() {
   const handleSubmit = async () => {
     setError(null);
 
+    // Validate required profile information
+    if (!phone?.trim()) {
+      setError("Phone number is required");
+      return;
+    }
+    if (!linkedinUrl?.trim()) {
+      setError("LinkedIn URL is required");
+      return;
+    }
+
     // Validate that at least one entry exists
     if (experiences.length === 0 || education.length === 0 || skills.length === 0) {
       setError("Please add at least one entry for experience, education, and skills");
@@ -230,17 +267,30 @@ export default function CompleteProfile() {
     setLoading(true);
     try {
       const token = getAuthToken();
+      const formData = new FormData();
+      
+      // Add form fields
+      formData.append('phone', phone);
+      formData.append('linkedin_url', linkedinUrl);
+      if (githubUrl) formData.append('github_url', githubUrl);
+      if (bio) formData.append('bio', bio);
+      
+      // Add profile photo if selected
+      if (profilePhoto) {
+        formData.append('profile_photo', profilePhoto);
+      }
+      
+      // Add JSON data as form fields
+      formData.append('experiences_json', JSON.stringify(experiences));
+      formData.append('education_json', JSON.stringify(education));
+      formData.append('skills_json', JSON.stringify(skills));
+      
       const response = await fetch(`${API_BASE_URL}/api/profile/save`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          experiences,
-          education,
-          skills
-        })
+        body: formData
       });
 
       if (!response.ok) {
@@ -248,6 +298,7 @@ export default function CompleteProfile() {
         throw new Error(errorData.detail || 'Failed to save profile. Please try again.');
       }
       
+      // Profile saved successfully, redirect to candidate dashboard
       router.push('/candidate');
     } catch (err: any) {
       setError(err.message || 'Profile submission failed. Please try again.');
@@ -333,7 +384,7 @@ export default function CompleteProfile() {
               className="mb-8"
             >
               <h2 className="text-2xl font-medium text-[#2D2A24] mb-2">Complete Your Profile</h2>
-              <p className="text-[#5A534A]">Choose how you'd like to build your profile</p>
+              <p className="text-[#5A534A]">Add your professional information and details</p>
             </motion.div>
 
             {/* Error Alert */}
@@ -348,18 +399,107 @@ export default function CompleteProfile() {
               </motion.div>
             )}
 
-            {/* Upload Success Alert */}
-            {uploadSuccess && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className="mb-4 p-3 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 flex items-start gap-2"
-              >
-                <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-green-700 dark:text-green-300">Resume parsed successfully! Review and edit your information.</p>
+            {/* Profile Information Section */}
+            <motion.div
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+              className="mb-8 space-y-4"
+            >
+              {/* Profile Photo Upload */}
+              <motion.div variants={itemVariants}>
+                <Label className="text-[#2D2A24] font-semibold block mb-2">Profile Photo</Label>
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/jpg,image/webp"
+                    onChange={handleProfilePhotoChange}
+                    className="hidden"
+                    id="profile-photo-input"
+                  />
+                  <label
+                    htmlFor="profile-photo-input"
+                    className="flex items-center justify-center w-full h-32 border-2 border-dashed border-[#D6CDC2] rounded-2xl cursor-pointer hover:border-[#B8915C] transition-colors bg-white/40 backdrop-blur-sm"
+                  >
+                    {profilePhotoUrl ? (
+                      <div className="flex flex-col items-center justify-center">
+                        <img
+                          src={profilePhotoUrl}
+                          alt="Profile preview"
+                          className="w-24 h-24 rounded-lg object-cover"
+                        />
+                        <p className="text-xs text-[#A69A8C] mt-2">Click to change</p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center">
+                        <Camera className="h-6 w-6 text-[#B8915C]/60 mb-1" />
+                        <p className="text-sm text-[#4A443C]">Upload Photo</p>
+                        <p className="text-xs text-[#A69A8C]">PNG, JPG, JPEG, WEBP</p>
+                      </div>
+                    )}
+                  </label>
+                </div>
               </motion.div>
-            )}
+
+              {/* Phone */}
+              <motion.div variants={itemVariants}>
+                <Label htmlFor="phone" className="text-sm font-medium text-[#4A443C] mb-1.5 block">
+                  Phone <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="phone"
+                  type="tel"
+                  placeholder="+1 (555) 123-4567"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="h-10 bg-white/60 backdrop-blur-sm border-[#D6CDC2] focus:border-[#B8915C] focus:ring-[#B8915C]/20 rounded-lg placeholder:text-[#A69A8C]"
+                />
+              </motion.div>
+
+              {/* LinkedIn URL */}
+              <motion.div variants={itemVariants}>
+                <Label htmlFor="linkedin" className="text-sm font-medium text-[#4A443C] mb-1.5 block">
+                  LinkedIn URL <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="linkedin"
+                  type="url"
+                  placeholder="https://linkedin.com/in/yourprofile"
+                  value={linkedinUrl}
+                  onChange={(e) => setLinkedinUrl(e.target.value)}
+                  className="h-10 bg-white/60 backdrop-blur-sm border-[#D6CDC2] focus:border-[#B8915C] focus:ring-[#B8915C]/20 rounded-lg placeholder:text-[#A69A8C]"
+                />
+              </motion.div>
+
+              {/* GitHub URL */}
+              <motion.div variants={itemVariants}>
+                <Label htmlFor="github" className="text-sm font-medium text-[#4A443C] mb-1.5 block">
+                  GitHub URL
+                </Label>
+                <Input
+                  id="github"
+                  type="url"
+                  placeholder="https://github.com/yourprofile"
+                  value={githubUrl}
+                  onChange={(e) => setGithubUrl(e.target.value)}
+                  className="h-10 bg-white/60 backdrop-blur-sm border-[#D6CDC2] focus:border-[#B8915C] focus:ring-[#B8915C]/20 rounded-lg placeholder:text-[#A69A8C]"
+                />
+              </motion.div>
+
+              {/* Bio */}
+              <motion.div variants={itemVariants}>
+                <Label htmlFor="bio" className="text-sm font-medium text-[#4A443C] mb-1.5 block">
+                  Bio
+                </Label>
+                <Textarea
+                  id="bio"
+                  placeholder="Tell us about yourself..."
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value)}
+                  className="bg-white/60 backdrop-blur-sm border-[#D6CDC2] focus:border-[#B8915C] focus:ring-[#B8915C]/20 rounded-lg placeholder:text-[#A69A8C] resize-none"
+                />
+              </motion.div>
+            </motion.div>
 
             {/* Tab buttons */}
             <motion.div
@@ -391,6 +531,19 @@ export default function CompleteProfile() {
                 Fill Manually
               </button>
             </motion.div>
+
+            {/* Upload Success Alert */}
+            {uploadSuccess && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="mb-4 p-3 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 flex items-start gap-2"
+              >
+                <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-green-700 dark:text-green-300">Resume parsed successfully! Review and edit your information.</p>
+              </motion.div>
+            )}
 
             {/* Upload Tab */}
             {activeTab === "upload" && (

@@ -10,6 +10,7 @@ class Candidate(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     phone = Column(String(20), nullable=True)
     linkedin_url = Column(String(500), nullable=False)
+    github_url = Column(String(500), nullable=True)
     resume_url = Column(String(500), nullable=False)
     parsed_data = Column(JSON, nullable=True)
     profile_photo_url = Column(String, nullable=True)
@@ -22,7 +23,6 @@ class Candidate(Base):
     education = relationship("Education", back_populates="candidate", cascade="all, delete")
     skills = relationship("Skill", back_populates="candidate", cascade="all, delete")
     projects = relationship("Project", back_populates="candidate", cascade="all, delete")
-    certifications = relationship("Certification", back_populates="candidate", cascade="all, delete")
     certifications = relationship("Certification", back_populates="candidate", cascade="all, delete")
 
 

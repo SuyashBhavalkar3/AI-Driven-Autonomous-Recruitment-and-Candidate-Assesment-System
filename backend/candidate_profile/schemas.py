@@ -80,6 +80,10 @@ class CertificationResponse(CertificationCreate):
         from_attributes = True
 
 class CandidateProfileComplete(BaseModel):
+    phone: Optional[str] = Field(None, min_length=10, max_length=20)
+    linkedin_url: Optional[str] = Field(None, max_length=500)
+    github_url: Optional[str] = Field(None, max_length=500)
+    bio: Optional[str] = Field(None, max_length=1000)
     experiences: List[ExperienceCreate]
     education: List[EducationCreate]
     skills: List[SkillCreate]
