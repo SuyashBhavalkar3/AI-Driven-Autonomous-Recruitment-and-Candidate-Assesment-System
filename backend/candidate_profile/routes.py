@@ -193,12 +193,30 @@ def get_profile_status(current_user: User = Depends(get_current_user), db: Sessi
             "has_skills": False
         }
     
+    # Auto-check if profile should be completed
+    has_basic_info = all([
+        candidate.phone and candidate.phone.strip(),
+        candidate.bio and len(candidate.bio.strip()) >= 20,
+        candidate.resume_url,
+        candidate.profile_photo_url
+    ])
+    has_experience = len(candidate.experiences) > 0
+    has_skills = len(candidate.skills) > 0
+    
+    # Auto-complete profile if all requirements are met
+    should_be_complete = has_basic_info and has_experience and has_skills
+    if should_be_complete and not candidate.profile_completed:
+        candidate.profile_completed = True
+        current_user.profile_completed = True
+        db.commit()
+        print(f"✅ Auto-completed profile for user {current_user.id}")
+    
     return {
         "profile_completed": candidate.profile_completed,
-        "resume_uploaded": True,
-        "has_experience": len(candidate.experiences) > 0,
+        "resume_uploaded": bool(candidate.resume_url),
+        "has_experience": has_experience,
         "has_education": len(candidate.education) > 0,
-        "has_skills": len(candidate.skills) > 0,
+        "has_skills": has_skills,
         "phone": candidate.phone,
         "location": candidate.location,
         "linkedin_url": candidate.linkedin_url,

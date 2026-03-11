@@ -5,7 +5,7 @@ import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import gsap from "gsap";
 import { calculateProfileCompletion, UserProfile } from "@/lib/profileCompletion";
-import { profileAPI } from "@/lib/api";
+import { profileAPI, CandidateProfile } from "@/lib/api";
 import ProfileHeader from "@/components/candidate/ProfileHeader";
 import ProfileCompletionStatus from "@/components/candidate/ProfileCompletionStatus";
 import PersonalInfoCard from "@/components/candidate/PersonalInfoCard";
@@ -48,7 +48,12 @@ export default function CandidateProfile() {
   const [profilePhoto, setProfilePhoto] = useState<string>("");
   const [profilePhotoFile, setProfilePhotoFile] = useState<File | null>(null);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
-  const [profileData, setProfileData] = useState< | null>(null);
+  const [profileData, setProfileData] = useState<CandidateProfile | null>(null);
+  const [profileStatus, setProfileStatus] = useState({
+    percentage: 0,
+    isComplete: false,
+    missingFields: [] as string[]
+  });
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -80,7 +85,7 @@ export default function CandidateProfile() {
             name: profile.name,
             email: profile.email,
             phone: profile.phone || "",
-            location: profile.location,
+            location: profile.location || "",
             bio: profile.bio || "",
             skills: profile.skills?.length > 0 ? 
               Object.values(profile.skills[0]).filter(Boolean).join(', ').split(', ') : [],
@@ -202,7 +207,57 @@ export default function CandidateProfile() {
     })),
   };
 
-  const profileStatus = calculateProfileCompletion(userProfile);
+  // Update profile status when profile data changes
+  useEffect(() => {
+    const updateProfileStatus = async () => {
+      try {
+        // Always fetch from backend first
+        const status = await profileAPI.getProfileStatus();
+        
+        // Check if profile is complete based on backend data
+        const hasBasicInfo = !!(status.phone && status.bio && status.resume_url && status.profile_photo_url);
+        const hasSkills = status.has_skills;
+        const hasExperience = status.has_experience;
+        
+        const isComplete = status.profile_completed && hasBasicInfo && hasSkills && hasExperience;
+        
+        if (isComplete) {
+          setProfileStatus({
+            percentage: 100,
+            isComplete: true,
+            missingFields: []
+          });
+        } else {
+          // Calculate missing fields based on backend data
+          const missingFields = [];
+          if (!formData.name) missingFields.push('Full Name');
+          if (!formData.email) missingFields.push('Email');
+          if (!status.phone) missingFields.push('Phone Number');
+          if (!status.location) missingFields.push('Location');
+          if (!status.bio || status.bio.length < 20) missingFields.push('Bio/Summary');
+          if (!status.has_skills) missingFields.push('Skills');
+          if (!status.resume_url) missingFields.push('Resume');
+          
+          const totalFields = 7;
+          const completedFields = totalFields - missingFields.length;
+          const percentage = Math.round((completedFields / totalFields) * 100);
+          
+          setProfileStatus({
+            percentage,
+            isComplete: false,
+            missingFields
+          });
+        }
+      } catch (error) {
+        console.error('Failed to fetch profile status:', error);
+        // Fallback to local calculation only if API fails
+        const localStatus = calculateProfileCompletion(userProfile);
+        setProfileStatus(localStatus);
+      }
+    };
+    
+    updateProfileStatus();
+  }, [profileData, formData, experiences, education, resumeFile]);
 
   // Validation function
   const validateForm = (): ValidationErrors => {
@@ -325,6 +380,7 @@ export default function CandidateProfile() {
         if (resumeFile && (profilePhotoFile || profileData?.profile_photo_url)) {
           const formDataToSend = new FormData();
           formDataToSend.append('phone', formData.phone);
+          formDataToSend.append('location', formData.location);
           if (formData.linkedin_url) {
             formDataToSend.append('linkedin_url', formData.linkedin_url);
           }
@@ -404,10 +460,29 @@ export default function CandidateProfile() {
         setIsEditing(false);
         setTouched({});
         
-        // Reload profile data
+        // Force profile completion check
+        try {
+          await profileAPI.getProfileStatus(); // This will trigger auto-completion in backend
+        } catch (error) {
+          console.error('Failed to check profile completion:', error);
+        }
+        
+        // Reload profile data to update completion status
         const refreshedProfile = await profileAPI.getProfile();
         if (refreshedProfile) {
           setProfileData(refreshedProfile);
+          // Update form data with refreshed profile
+          setFormData({
+            name: refreshedProfile.name,
+            email: refreshedProfile.email,
+            phone: refreshedProfile.phone || "",
+            location: refreshedProfile.location || "",
+            bio: refreshedProfile.bio || "",
+            skills: refreshedProfile.skills?.length > 0 ? 
+              Object.values(refreshedProfile.skills[0]).filter(Boolean).join(', ').split(', ') : [],
+            linkedin_url: refreshedProfile.linkedin_url || "",
+          });
+          setProfilePhoto(refreshedProfile.profile_photo_url || "");
         }
         
       } catch (error) {

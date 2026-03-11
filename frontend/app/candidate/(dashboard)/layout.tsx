@@ -29,8 +29,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { getAuthToken, logout } from "@/lib/auth";
-import { getCurrentUser } from "@/lib/api";
-import { calculateProfileCompletion } from "@/lib/profileCompletion";
+import { getCurrentUser, profileAPI } from "@/lib/api";
 
 /* ------------------ Types ------------------ */
 interface User {
@@ -70,6 +69,7 @@ export default function CandidateLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileStatus, setProfileStatus] = useState({ percentage: 0, missingFields: [] as string[], isComplete: false });
 
   /* ------------------ Load user ------------------ */
   useEffect(() => {
@@ -88,6 +88,14 @@ export default function CandidateLayout({
 
         if (mounted) {
           setUser(data);
+          
+          // Fetch profile completion status
+          try {
+            const status = await profileAPI.getProfileStatus(token);
+            setProfileStatus(status);
+          } catch (statusErr) {
+            console.error('Failed to fetch profile status:', statusErr);
+          }
         }
 
       } catch (err) {
@@ -143,17 +151,7 @@ export default function CandidateLayout({
     return pathname.startsWith(href);
   };
 
-  // Calculate profile completion
-  const profileStatus = calculateProfileCompletion({
-    fullName: user?.name || "",
-    email: user?.email || "",
-    phone: user?.phone || "",
-    location: user?.location || "",
-    bio: user?.bio || "",
-    skills: user?.skills || [],
-    resume: user?.resume || "",
-    experiences: user?.experiences || [],
-  });
+
 
   // Get completion message based on percentage
   const getCompletionMessage = (percentage: number) => {
@@ -269,11 +267,11 @@ export default function CandidateLayout({
                   )}
 
                   {/* Missing fields summary */}
-                  {profileStatus.missingFields.length > 0 && (
+                  {profileStatus.missingFields?.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-[#D6CDC2]/20">
                       <p className="text-xs text-[#A69A8C] mb-2">Missing:</p>
                       <div className="flex flex-wrap gap-1">
-                        {profileStatus.missingFields.slice(0, 3).map((field) => (
+                        {profileStatus.missingFields?.slice(0, 3).map((field) => (
                           <Badge 
                             key={field}
                             variant="outline" 
@@ -282,9 +280,9 @@ export default function CandidateLayout({
                             {field}
                           </Badge>
                         ))}
-                        {profileStatus.missingFields.length > 3 && (
+                        {profileStatus.missingFields?.length > 3 && (
                           <Badge variant="outline" className="text-[10px] bg-white/50 border-[#D6CDC2]/30">
-                            +{profileStatus.missingFields.length - 3} more
+                            +{profileStatus.missingFields?.length - 3} more
                           </Badge>
                         )}
                       </div>

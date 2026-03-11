@@ -24,7 +24,7 @@ import {
   Settings,
 } from "lucide-react";
 import { getUserData, getAuthToken } from "@/lib/auth";
-import { getCurrentUser } from "@/lib/api";
+import { getCurrentUser, profileAPI } from "@/lib/api";
 import { ProfileCompletionCard } from "@/components/ProfileCompletionCard";
 import { calculateProfileCompletion } from "@/lib/profileCompletion";
 import Loader from "@/components/Loader";
@@ -57,6 +57,11 @@ const fetchUpcomingInterviews = async () => {
 
 export default function CandidateDashboard() {
   const [userData, setUserData] = useState<any>(null);
+  const [profileStatus, setProfileStatus] = useState({
+    percentage: 0,
+    isComplete: false,
+    missingFields: [] as string[]
+  });
   const [stats, setStats] = useState<any[]>([]);
   const [jobs, setJobs] = useState<any[]>([]);
   const [interviews, setInterviews] = useState<any[]>([]);
@@ -83,6 +88,51 @@ export default function CandidateDashboard() {
         setStats(statsData);
         setJobs(jobsData);
         setInterviews(interviewsData);
+        
+        // Fetch profile completion status from backend
+        try {
+          const status = await profileAPI.getProfileStatus();
+          if (status.profile_completed) {
+            setProfileStatus({
+              percentage: 100,
+              isComplete: true,
+              missingFields: []
+            });
+          } else {
+            // Calculate missing fields based on backend data
+            const missingFields = [];
+            if (!status.phone) missingFields.push('Phone Number');
+            if (!status.location) missingFields.push('Location');
+            if (!status.bio || status.bio.length < 20) missingFields.push('Bio/Summary');
+            if (!status.has_skills) missingFields.push('Skills');
+            if (!status.resume_url) missingFields.push('Resume');
+            if (!status.profile_photo_url) missingFields.push('Profile Photo');
+            
+            const totalFields = 6;
+            const completedFields = totalFields - missingFields.length;
+            const percentage = Math.round((completedFields / totalFields) * 100);
+            
+            setProfileStatus({
+              percentage,
+              isComplete: false,
+              missingFields
+            });
+          }
+        } catch (error) {
+          console.error('Failed to fetch profile status:', error);
+          // Fallback to local calculation
+          const fallbackStatus = calculateProfileCompletion({
+            fullName: userData?.full_name || "",
+            email: userData?.email || "",
+            phone: "",
+            location: "",
+            bio: "",
+            skills: [],
+            resume: "",
+            experiences: [],
+          });
+          setProfileStatus(fallbackStatus);
+        }
       } catch (error) {
         console.error("Failed to load dashboard data:", error);
       } finally {
@@ -90,7 +140,7 @@ export default function CandidateDashboard() {
       }
     };
     loadData();
-  }, []);
+  }, [userData]);
 
   // Generate decorative particles (client-side only)
   useEffect(() => {
@@ -156,17 +206,7 @@ export default function CandidateDashboard() {
     }
   }, [loading]);
 
-  // Profile completion calculation
-  const profileStatus = calculateProfileCompletion({
-    fullName: userData?.full_name || "",
-    email: userData?.email || "",
-    phone: "",
-    location: "",
-    bio: "",
-    skills: [],
-    resume: "",
-    experiences: [],
-  });
+
 
   if (loading) {
     return <Loader fullPage={true} />;
