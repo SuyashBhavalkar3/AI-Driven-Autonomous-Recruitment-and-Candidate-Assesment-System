@@ -27,7 +27,6 @@ import { getUserData, getAuthToken } from "@/lib/auth";
 import { getCurrentUser } from "@/lib/api";
 import { ProfileCompletionCard } from "@/components/ProfileCompletionCard";
 import { calculateProfileCompletion } from "@/lib/profileCompletion";
-import Loader from "@/components/Loader";
 
 // Mock API functions – replace with actual endpoints
 const fetchDashboardStats = async () => {
@@ -169,7 +168,11 @@ export default function CandidateDashboard() {
   });
 
   if (loading) {
-    return <Loader fullPage={true} />;
+    return (
+      <div className="relative min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-[#B8915C]" />
+      </div>
+    );
   }
 
   return (

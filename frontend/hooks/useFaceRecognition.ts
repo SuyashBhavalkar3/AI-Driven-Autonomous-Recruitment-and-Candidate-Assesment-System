@@ -3,22 +3,13 @@ import * as faceapi from "face-api.js";
 
 interface UseFaceRecognitionProps {
   videoRef: React.RefObject<HTMLVideoElement>;
-  enabled?: boolean;
-  onViolation?: (type: string) => void;
 }
 
-export function useFaceRecognition({
-  videoRef,
-  enabled = true,
-  onViolation,
-}: UseFaceRecognitionProps) {
+export function useFaceRecognition({ videoRef }: UseFaceRecognitionProps) {
   const [modelsLoaded, setModelsLoaded] = useState(false);
-  const [faceDetected, setFaceDetected] = useState(false);
-  const [multipleFaces, setMultipleFaces] = useState(false);
-  const [gazeAway, setGazeAway] = useState(false);
-  const [faceBox, setFaceBox] = useState<faceapi.Box | null>(null);
-
-  const detectionInterval = useRef<NodeJS.Timeout>();
+  const [referenceDescriptor, setReferenceDescriptor] = useState<Float32Array | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const faceCheckInterval = useRef<NodeJS.Timeout>();
 
   // Load models
   useEffect(() => {
@@ -30,7 +21,6 @@ export function useFaceRecognition({
           faceapi.nets.faceRecognitionNet.loadFromUri("/models"),
         ]);
         setModelsLoaded(true);
-        console.log("Face models loaded");
       } catch (error) {
         console.error("Failed to load face models", error);
       }
@@ -38,63 +28,67 @@ export function useFaceRecognition({
     loadModels();
   }, []);
 
-  // Continuous detection
-  useEffect(() => {
-    if (!modelsLoaded || !enabled || !videoRef.current) return;
+  // Capture reference face
+  const captureReference = async (): Promise<boolean> => {
+    if (!videoRef.current || !canvasRef.current || !modelsLoaded) return false;
 
-    const detect = async () => {
+    const video = videoRef.current;
+    const detection = await faceapi
+      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+
+    if (!detection) return false;
+
+    setReferenceDescriptor(detection.descriptor);
+
+    // Optional: upload to Cloudinary (can be extracted to separate service)
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
+    // ... upload logic
+
+    return true;
+  };
+
+  // Start periodic face check
+  const startFaceCheck = (onViolation: (reason: string) => void) => {
+    if (!videoRef.current || !referenceDescriptor) return;
+
+    faceCheckInterval.current = setInterval(async () => {
       if (!videoRef.current) return;
 
       try {
-        const detections = await faceapi
-          .detectAllFaces(videoRef.current, new faceapi.TinyFaceDetectorOptions())
-          .withFaceLandmarks();
+        const detection = await faceapi
+          .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions())
+          .withFaceLandmarks()
+          .withFaceDescriptor();
 
-        const hasFace = detections.length > 0;
-        setFaceDetected(hasFace);
-
-        const multiple = detections.length > 1;
-        setMultipleFaces(multiple);
-
-        // Gaze away estimation (simplified)
-        if (hasFace && detections[0].landmarks) {
-          const landmarks = detections[0].landmarks;
-          const nose = landmarks.getNose();
-          if (nose.length > 0) {
-            const noseTip = nose[3]; // approximate tip
-            const videoWidth = videoRef.current.videoWidth;
-            const centerX = videoWidth / 2;
-            const threshold = videoWidth * 0.15; // 15% from center
-            const isLookingAway = Math.abs(noseTip.x - centerX) > threshold;
-            setGazeAway(isLookingAway);
-          }
+        if (!detection) {
+          onViolation("No face detected");
+          return;
         }
 
-        if (hasFace) {
-          setFaceBox(detections[0].detection.box);
+        const distance = faceapi.euclideanDistance(referenceDescriptor, detection.descriptor);
+        if (distance > 0.6) {
+          onViolation("Face mismatch - possible impersonation");
         }
-
-        // Trigger violations
-        if (!hasFace) onViolation?.("no_face");
-        if (multiple) onViolation?.("multiple_faces");
-        if (gazeAway) onViolation?.("gaze_away");
       } catch (error) {
-        console.error("Face detection error", error);
+        console.error("Face check error", error);
       }
-    };
+    }, 5000);
+  };
 
-    detectionInterval.current = setInterval(detect, 500);
-
-    return () => {
-      if (detectionInterval.current) clearInterval(detectionInterval.current);
-    };
-  }, [modelsLoaded, enabled, videoRef, onViolation, gazeAway]);
+  const stopFaceCheck = () => {
+    if (faceCheckInterval.current) clearInterval(faceCheckInterval.current);
+  };
 
   return {
     modelsLoaded,
-    faceDetected,
-    multipleFaces,
-    gazeAway,
-    faceBox,
+    referenceDescriptor,
+    canvasRef,
+    captureReference,
+    startFaceCheck,
+    stopFaceCheck,
   };
 }

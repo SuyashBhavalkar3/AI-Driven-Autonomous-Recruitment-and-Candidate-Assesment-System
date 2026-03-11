@@ -50,14 +50,14 @@ export default function HRLayout({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-stone-100 dark:from-stone-950 dark:to-stone-900">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
       {/* Mobile menu button */}
       <div className="lg:hidden fixed top-4 left-4 z-50">
         <Button
           variant="outline"
           size="icon"
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="border-stone-200 dark:border-stone-800 bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm shadow-md"
+          className="border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm shadow-md"
         >
           {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </Button>
@@ -66,18 +66,18 @@ export default function HRLayout({ children }: { children: React.ReactNode }) {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 w-72 bg-gradient-to-b from-white to-amber-50 dark:from-stone-900 dark:to-stone-950 border-r border-stone-200 dark:border-stone-800 shadow-xl transform transition-transform duration-300 ease-in-out lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-40 w-72 bg-gradient-to-b from-white to-slate-50 dark:from-slate-900 dark:to-slate-950 border-r border-slate-200 dark:border-slate-800 shadow-xl transform transition-transform duration-300 ease-in-out lg:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
         <div className="flex flex-col h-full">
           {/* Logo area with decorative element */}
-          <div className="p-6 border-b border-stone-200 dark:border-stone-800">
+          <div className="p-6 border-b border-slate-200 dark:border-slate-800">
             <Link href="/hr" className="flex items-center gap-2">
-              <div className="p-2 bg-gradient-to-br from-amber-500 to-stone-500 rounded-lg shadow-lg shadow-amber-500/20">
+              <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-lg shadow-lg shadow-blue-500/20">
                 <Sparkles className="h-6 w-6 text-white" />
               </div>
-              <span className="text-xl font-bold bg-gradient-to-r from-amber-600 to-stone-600 bg-clip-text text-transparent">
+              <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
                 HireFlow HR
               </span>
             </Link>
@@ -94,18 +94,18 @@ export default function HRLayout({ children }: { children: React.ReactNode }) {
                   className={cn(
                     "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 group relative",
                     isActive
-                      ? "bg-gradient-to-r from-amber-50 to-stone-50 dark:from-amber-950/50 dark:to-stone-950/50 text-amber-700 dark:text-amber-300 shadow-sm"
-                      : "text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800/50"
+                      ? "bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/50 dark:to-indigo-950/50 text-blue-700 dark:text-blue-300 shadow-sm"
+                      : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/50"
                   )}
                   onClick={() => setSidebarOpen(false)}
                 >
                   {isActive && (
-                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-gradient-to-b from-amber-500 to-stone-500 rounded-r-full" />
+                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-gradient-to-b from-blue-500 to-indigo-500 rounded-r-full" />
                   )}
                   <item.icon
                     className={cn(
                       "h-5 w-5 transition-transform group-hover:scale-110",
-                      isActive ? "text-amber-600 dark:text-amber-400" : "text-stone-500 dark:text-stone-400"
+                      isActive ? "text-blue-600 dark:text-blue-400" : "text-slate-500 dark:text-slate-400"
                     )}
                   />
                   {item.name}
@@ -115,26 +115,26 @@ export default function HRLayout({ children }: { children: React.ReactNode }) {
           </nav>
 
           {/* User profile section */}
-          <div className="p-4 border-t border-stone-200 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-900/50">
+          <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
             <div className="flex items-center gap-3">
-              <Avatar className="h-10 w-10 ring-2 ring-amber-500/20">
+              <Avatar className="h-10 w-10 ring-2 ring-blue-500/20">
                 <AvatarImage src="https://github.com/shadcn.png" />
-                <AvatarFallback className="bg-gradient-to-br from-amber-500 to-stone-500 text-white">
+                <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-500 text-white">
                   {userData?.name?.charAt(0) || "HR"}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-stone-900 dark:text-white truncate">
+                <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
                   {userData?.name || "Loading..."}
                 </p>
-                <p className="text-xs text-stone-500 dark:text-stone-400 truncate">
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
                   {userData?.email || ""}
                 </p>
               </div>
               <Button
                 variant="ghost"
                 size="icon"
-                className="text-stone-500 hover:text-red-600 dark:text-stone-400 dark:hover:text-red-400 transition-colors"
+                className="text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 transition-colors"
                 onClick={logout}
               >
                 <LogOut className="h-4 w-4" />

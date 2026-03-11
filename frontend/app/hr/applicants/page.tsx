@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +30,6 @@ import {
   Calendar,
   Briefcase,
 } from "lucide-react";
-import Loader from "@/components/Loader";
 
 type ApplicantStatus =
   | "under_review"
@@ -130,19 +129,19 @@ const applicants: Applicant[] = [
 const statusConfig: Record<ApplicantStatus, { label: string; color: string }> = {
   under_review: {
     label: "Under Review",
-    color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border-0",
+    color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border-0",
   },
   assessment_completed: {
     label: "Assessment Done",
-    color: "bg-stone-100 text-stone-700 dark:bg-stone-900/30 dark:text-stone-300 border-0",
+    color: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border-0",
   },
   interview_completed: {
     label: "Interview Done",
-    color: "bg-amber-200 text-amber-800 dark:bg-amber-800/30 dark:text-amber-200 border-0",
+    color: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border-0",
   },
   offered: {
     label: "Offered",
-    color: "bg-amber-600 text-white dark:bg-amber-700 dark:text-white border-0",
+    color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border-0",
   },
   rejected: {
     label: "Rejected",
@@ -157,21 +156,6 @@ export default function ApplicantsPage() {
   const [selectedApplicant, setSelectedApplicant] = useState<Applicant | null>(
     null
   );
-  const [loading, setLoading] = useState(true);
-
-  // Simulate API loading
-  useEffect(() => {
-    const loadApplicants = async () => {
-      try {
-        await new Promise(resolve => setTimeout(resolve, 1300));
-        setLoading(false);
-      } catch (error) {
-        console.error('Failed to load applicants:', error);
-        setLoading(false);
-      }
-    };
-    loadApplicants();
-  }, []);
 
   const filteredAndSorted = applicants
     .filter((app) => {
@@ -205,41 +189,37 @@ export default function ApplicantsPage() {
     setSelectedApplicant(null);
   };
 
-  if (loading) {
-    return <Loader fullPage={true} />;
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-stone-100 dark:from-stone-950 dark:to-stone-900">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-semibold text-stone-900 dark:text-white flex items-center gap-2">
+          <h1 className="text-3xl font-semibold text-slate-900 dark:text-white flex items-center gap-2">
             Applicants
-            <Sparkles className="h-5 w-5 text-amber-500" />
+            <Sparkles className="h-5 w-5 text-indigo-500" />
           </h1>
-          <p className="text-stone-500 dark:text-stone-400 mt-1">
+          <p className="text-slate-500 dark:text-slate-400 mt-1">
             Review and manage all applicants
           </p>
         </div>
 
         {/* Filters Card */}
-        <Card className="mb-6 border-0 shadow-lg bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm">
+        <Card className="mb-6 border-0 shadow-lg bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
           <CardContent className="p-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Search */}
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
                   placeholder="Search by name or position..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 focus:ring-2 focus:ring-amber-500/20"
+                  className="pl-10 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500/20"
                 />
               </div>
               {/* Sort */}
               <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 focus:ring-2 focus:ring-amber-500/20">
+                <SelectTrigger className="border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500/20">
                   <SelectValue placeholder="Sort by" />
                 </SelectTrigger>
                 <SelectContent>
@@ -250,7 +230,7 @@ export default function ApplicantsPage() {
               </Select>
               {/* Filter by status */}
               <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 focus:ring-2 focus:ring-amber-500/20">
+                <SelectTrigger className="border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500/20">
                   <SelectValue placeholder="Filter by status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -271,14 +251,14 @@ export default function ApplicantsPage() {
           {filteredAndSorted.map((applicant) => (
             <Card
               key={applicant.id}
-              className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm"
+              className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm"
             >
               <CardContent className="p-6">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
                     {/* Name and Status */}
                     <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-lg font-semibold text-stone-900 dark:text-white">
+                      <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
                         {applicant.name}
                       </h3>
                       <Badge className={statusConfig[applicant.status].color}>
@@ -286,36 +266,36 @@ export default function ApplicantsPage() {
                       </Badge>
                     </div>
                     {/* Position */}
-                    <p className="text-stone-600 dark:text-stone-400 mb-3">
+                    <p className="text-slate-600 dark:text-slate-400 mb-3">
                       {applicant.position}
                     </p>
 
                     {/* Scores */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-                      <div className="flex items-center gap-2 text-sm bg-stone-50 dark:bg-stone-800/50 p-2 rounded-md">
-                        <TrendingUp className="h-4 w-4 text-amber-500" />
-                        <span className="text-stone-600 dark:text-stone-400">
+                      <div className="flex items-center gap-2 text-sm bg-slate-50 dark:bg-slate-800/50 p-2 rounded-md">
+                        <TrendingUp className="h-4 w-4 text-indigo-500" />
+                        <span className="text-slate-600 dark:text-slate-400">
                           Match:
                         </span>
-                        <span className="font-semibold text-amber-600 dark:text-amber-400">
+                        <span className="font-semibold text-indigo-600 dark:text-indigo-400">
                           {applicant.matchScore}%
                         </span>
                       </div>
                       {applicant.assessmentScore && (
-                        <div className="flex items-center gap-2 text-sm bg-stone-50 dark:bg-stone-800/50 p-2 rounded-md">
-                          <FileText className="h-4 w-4 text-stone-500" />
-                          <span className="text-stone-600 dark:text-stone-400">
+                        <div className="flex items-center gap-2 text-sm bg-slate-50 dark:bg-slate-800/50 p-2 rounded-md">
+                          <FileText className="h-4 w-4 text-purple-500" />
+                          <span className="text-slate-600 dark:text-slate-400">
                             Assessment:
                           </span>
-                          <span className="font-semibold text-stone-600 dark:text-stone-400">
+                          <span className="font-semibold text-purple-600 dark:text-purple-400">
                             {applicant.assessmentScore}%
                           </span>
                         </div>
                       )}
                       {applicant.interviewScore && (
-                        <div className="flex items-center gap-2 text-sm bg-stone-50 dark:bg-stone-800/50 p-2 rounded-md">
+                        <div className="flex items-center gap-2 text-sm bg-slate-50 dark:bg-slate-800/50 p-2 rounded-md">
                           <Award className="h-4 w-4 text-amber-500" />
-                          <span className="text-stone-600 dark:text-stone-400">
+                          <span className="text-slate-600 dark:text-slate-400">
                             Interview:
                           </span>
                           <span className="font-semibold text-amber-600 dark:text-amber-400">
@@ -328,28 +308,28 @@ export default function ApplicantsPage() {
                     {/* Meta info: Overall score, experience, applied date */}
                     <div className="flex flex-wrap items-center gap-3 text-sm">
                       <div className="flex items-center gap-1">
-                        <span className="text-stone-500 dark:text-stone-400">
+                        <span className="text-slate-500 dark:text-slate-400">
                           Overall:
                         </span>
                         <span
                           className={`font-bold px-2 py-0.5 rounded-full ${
                             getOverallScore(applicant) >= 90
-                              ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
                               : getOverallScore(applicant) >= 80
-                              ? "bg-stone-100 text-stone-700 dark:bg-stone-900/30 dark:text-stone-300"
-                              : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300"
+                              ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300"
+                              : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
                           }`}
                         >
                           {getOverallScore(applicant)}%
                         </span>
                       </div>
-                      <span className="text-stone-400">•</span>
-                      <div className="flex items-center gap-1 text-stone-500 dark:text-stone-400">
+                      <span className="text-slate-400">•</span>
+                      <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
                         <Briefcase className="h-4 w-4" />
                         {applicant.experience}
                       </div>
-                      <span className="text-stone-400">•</span>
-                      <div className="flex items-center gap-1 text-stone-500 dark:text-stone-400">
+                      <span className="text-slate-400">•</span>
+                      <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
                         <Calendar className="h-4 w-4" />
                         Applied {new Date(applicant.appliedDate).toLocaleDateString()}
                       </div>
@@ -362,7 +342,7 @@ export default function ApplicantsPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => setSelectedApplicant(applicant)}
-                      className="border-stone-200 dark:border-stone-700 hover:bg-amber-50 dark:hover:bg-amber-950/30 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
+                      className="border-slate-200 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                     >
                       View Details
                     </Button>
@@ -371,7 +351,7 @@ export default function ApplicantsPage() {
                         <Button
                           size="sm"
                           onClick={() => sendOffer(applicant.id)}
-                          className="bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-700 hover:to-amber-600 text-white shadow-lg shadow-amber-500/20 hover:shadow-xl transition-all duration-300"
+                          className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white shadow-lg shadow-emerald-500/20 hover:shadow-xl transition-all duration-300"
                         >
                           <CheckCircle className="h-4 w-4 mr-2" />
                           Send Offer
@@ -386,9 +366,9 @@ export default function ApplicantsPage() {
 
         {/* Applicant Details Dialog */}
         <Dialog open={!!selectedApplicant} onOpenChange={() => setSelectedApplicant(null)}>
-          <DialogContent className="max-w-2xl bg-white/95 dark:bg-stone-900/95 backdrop-blur-xl border-0 shadow-2xl">
+          <DialogContent className="max-w-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-0 shadow-2xl">
             <DialogHeader>
-              <DialogTitle className="text-2xl font-semibold text-stone-900 dark:text-white">
+              <DialogTitle className="text-2xl font-semibold text-slate-900 dark:text-white">
                 {selectedApplicant?.name}
               </DialogTitle>
             </DialogHeader>
@@ -396,19 +376,19 @@ export default function ApplicantsPage() {
               <div className="space-y-5">
                 {/* Contact Information */}
                 <div>
-                  <h3 className="text-sm font-medium text-stone-500 dark:text-stone-400 uppercase tracking-wider mb-3">
+                  <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">
                     Contact
                   </h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-amber-500" />
-                      <span className="text-stone-700 dark:text-stone-300">
+                      <Mail className="h-4 w-4 text-indigo-500" />
+                      <span className="text-slate-700 dark:text-slate-300">
                         {selectedApplicant.email}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Phone className="h-4 w-4 text-amber-500" />
-                      <span className="text-stone-700 dark:text-stone-300">
+                      <Phone className="h-4 w-4 text-indigo-500" />
+                      <span className="text-slate-700 dark:text-slate-300">
                         {selectedApplicant.phone}
                       </span>
                     </div>
@@ -417,7 +397,7 @@ export default function ApplicantsPage() {
 
                 {/* Skills */}
                 <div>
-                  <h3 className="text-sm font-medium text-stone-500 dark:text-stone-400 uppercase tracking-wider mb-3">
+                  <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">
                     Skills
                   </h3>
                   <div className="flex flex-wrap gap-2">
@@ -425,7 +405,7 @@ export default function ApplicantsPage() {
                       <Badge
                         key={skill}
                         variant="secondary"
-                        className="bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 border-0"
+                        className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-0"
                       >
                         {skill}
                       </Badge>
@@ -435,27 +415,27 @@ export default function ApplicantsPage() {
 
                 {/* Scores */}
                 <div>
-                  <h3 className="text-sm font-medium text-stone-500 dark:text-stone-400 uppercase tracking-wider mb-3">
+                  <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">
                     Scores
                   </h3>
                   <div className="grid grid-cols-3 gap-4">
-                    <div className="p-4 bg-amber-50 dark:bg-amber-950/30 rounded-lg text-center">
-                      <p className="text-xs text-stone-500 dark:text-stone-400 mb-1">Match</p>
-                      <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                    <div className="p-4 bg-indigo-50 dark:bg-indigo-950/30 rounded-lg text-center">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Match</p>
+                      <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
                         {selectedApplicant.matchScore}%
                       </p>
                     </div>
                     {selectedApplicant.assessmentScore && (
-                      <div className="p-4 bg-stone-50 dark:bg-stone-800/50 rounded-lg text-center">
-                        <p className="text-xs text-stone-500 dark:text-stone-400 mb-1">Assessment</p>
-                        <p className="text-2xl font-bold text-stone-600 dark:text-stone-400">
+                      <div className="p-4 bg-purple-50 dark:bg-purple-950/30 rounded-lg text-center">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Assessment</p>
+                        <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
                           {selectedApplicant.assessmentScore}%
                         </p>
                       </div>
                     )}
                     {selectedApplicant.interviewScore && (
                       <div className="p-4 bg-amber-50 dark:bg-amber-950/30 rounded-lg text-center">
-                        <p className="text-xs text-stone-500 dark:text-stone-400 mb-1">Interview</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Interview</p>
                         <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
                           {selectedApplicant.interviewScore}%
                         </p>
@@ -470,7 +450,7 @@ export default function ApplicantsPage() {
                     getOverallScore(selectedApplicant) >= 85 && (
                       <Button
                         onClick={() => sendOffer(selectedApplicant.id)}
-                        className="bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-700 hover:to-amber-600 text-white shadow-lg"
+                        className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white shadow-lg"
                       >
                         <CheckCircle className="h-4 w-4 mr-2" />
                         Send Offer
@@ -478,7 +458,7 @@ export default function ApplicantsPage() {
                     )}
                   <Button
                     variant="outline"
-                    className="border-stone-200 dark:border-stone-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                    className="border-slate-200 dark:border-slate-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
                   >
                     Reject
                   </Button>

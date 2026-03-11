@@ -203,3 +203,18 @@ export const proctoringAPI = {
     return res.json();
   },
 };
+
+// Jobs API
+export const jobsAPI = {
+  getAllJobs: async () => {
+    const res = await fetch(`${API_BASE_URL}/jobs/`);
+    if (!res.ok) throw new Error('Failed to fetch jobs');
+    return res.json();
+  },
+
+  getJobById: async (jobId: number) => {
+    const res = await fetch(`${API_BASE_URL}/jobs/${jobId}`);
+    if (!res.ok) throw new Error('Failed to fetch job details');
+    return res.json();
+  },
+};
