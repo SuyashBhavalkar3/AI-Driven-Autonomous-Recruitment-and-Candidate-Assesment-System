@@ -38,18 +38,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import gsap from "gsap";
 import Loader from "@/components/Loader";
-
-// Mock user profile - replace with actual data from backend
-const mockUserProfile: UserProfile = {
-  fullName: "John Doe",
-  email: "john@example.com",
-  phone: "",
-  location: "",
-  bio: "",
-  skills: [],
-  resume: "",
-  experiences: [],
-};
+import { getAuthToken } from "@/lib/auth";
 
 // Type for API job response
 interface ApiJob {
@@ -98,9 +87,9 @@ function getRelativeTime(dateString: string): string {
 }
 
 // Map API job to UI job
-function mapApiJobToUi(apiJob: ApiJob): UiJob {
-  // Extract first two letters for logo (fallback to "CO")
-  const companyName = `Company ${apiJob.created_by}`; // Placeholder until we fetch employer info
+function mapApiJobToUi(apiJob: ApiJob & { company?: { name: string; website?: string } }): UiJob {
+  // Use company name from API or fallback
+  const companyName = apiJob.company?.name || `Company ${apiJob.created_by}`;
   const logo = companyName
     .split(' ')
     .map(word => word[0])
@@ -145,9 +134,67 @@ export default function JobsPage() {
   const [jobs, setJobs] = useState<UiJob[]>([]);
   const [particles, setParticles] = useState<React.ReactNode[]>([]);
   const cardsRef = useRef<HTMLDivElement>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
 
   // Check profile completion
-  const profileStatus = calculateProfileCompletion(mockUserProfile);
+  const profileStatus = userProfile ? calculateProfileCompletion(userProfile) : { isComplete: false, missingFields: [] };
+
+  // Fetch user profile
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        const token = getAuthToken();
+        if (!token) {
+          throw new Error('No authentication token found');
+        }
+
+        const response = await fetch('http://localhost:8000/v1/auth/me', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch profile: ${response.statusText}`);
+        }
+
+        const userData = await response.json();
+        
+        // Map auth user data to UserProfile format
+        const mappedProfile: UserProfile = {
+          fullName: userData.name || "",
+          email: userData.email || "",
+          phone: "", // Not available in auth endpoint
+          location: "", // Not available in auth endpoint  
+          bio: "", // Not available in auth endpoint
+          skills: [], // Not available in auth endpoint
+          resume: "", // Not available in auth endpoint
+          experiences: [], // Not available in auth endpoint
+        };
+        
+        setUserProfile(mappedProfile);
+      } catch (err) {
+        console.error('Error fetching user profile:', err);
+        // Set empty profile as fallback
+        setUserProfile({
+          fullName: "",
+          email: "",
+          phone: "",
+          location: "",
+          bio: "",
+          skills: [],
+          resume: "",
+          experiences: [],
+        });
+      } finally {
+        setProfileLoading(false);
+      }
+    };
+
+    fetchUserProfile();
+  }, []);
 
   // Fetch jobs from API
   useEffect(() => {
@@ -234,16 +281,9 @@ export default function JobsPage() {
   });
 
   const handleApply = (job: UiJob) => {
-    if (profileStatus.isComplete) {
-      // Navigate to job detail page
-      router.push(`/jobs/${job.id}`);
-    } else {
-      // Open application dialog with warning
-      setSelectedJob(job);
-      setApplicationStatus("idle");
-      setCoverLetter("");
-      setMatchScore(null);
-    }
+    // For now, always allow application since we're using basic auth profile
+    // In a full implementation, you'd check the detailed candidate profile
+    router.push(`/candidate/jobs/${job.id}`);
   };
 
   const submitApplication = async () => {
@@ -257,9 +297,9 @@ export default function JobsPage() {
 
   return (
     <div className="relative min-h-screen bg-[#F9F6F0] dark:bg-slate-950 overflow-hidden">
-      {loading && <Loader fullPage={true} />}
+      {(loading || profileLoading) && <Loader fullPage={true} />}
 
-      {!loading && (
+      {!loading && !profileLoading && (
         <>
           {/* Decorative particles */}
           <div className="absolute inset-0 pointer-events-none overflow-hidden">

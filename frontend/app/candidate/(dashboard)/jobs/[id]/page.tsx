@@ -77,7 +77,8 @@ function getRelativeTime(dateString: string): string {
 }
 
 function mapApiJobToUi(apiJob: ApiJob): UiJob {
-  const companyName = `Company ${apiJob.created_by}`;
+  // Use company name from API or fallback
+  const companyName = apiJob.company?.name || `Company ${apiJob.created_by}`;
   const logo = companyName
     .split(' ')
     .map(word => word[0])
@@ -168,24 +169,24 @@ export default function JobDetailPage() {
 
         // Fetch user profile
         try {
-          const profileResponse = await fetch('http://localhost:8000/v1/profile/candidate', {
+          const profileResponse = await fetch('http://localhost:8000/v1/auth/me', {
             headers: {
               'Authorization': `Bearer ${token}`,
             },
           });
           
           if (profileResponse.ok) {
-            const profileData = await profileResponse.json();
-            // Map API profile to UserProfile format
+            const userData = await profileResponse.json();
+            // Map auth user data to UserProfile format
             const mappedProfile: UserProfile = {
-              fullName: profileData.name || '',
-              email: profileData.email || '',
-              phone: profileData.phone || '',
-              location: profileData.location || '',
-              bio: profileData.bio || '',
-              skills: profileData.skills || [],
-              resume: profileData.resume_url || '',
-              experiences: profileData.experiences || [],
+              fullName: userData.name || '',
+              email: userData.email || '',
+              phone: '', // Not available in auth endpoint
+              location: '', // Not available in auth endpoint
+              bio: '', // Not available in auth endpoint
+              skills: [], // Not available in auth endpoint
+              resume: '', // Not available in auth endpoint
+              experiences: [], // Not available in auth endpoint
             };
             setUserProfile(mappedProfile);
           } else {
@@ -231,29 +232,70 @@ export default function JobDetailPage() {
   }, [jobId, router]);
 
   const submitApplication = async () => {
+    if (!job) return;
+    
     setApplicationStatus("applying");
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    const score = Math.floor(Math.random() * 40) + 60;
-    setMatchScore(score);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setApplicationStatus(score >= 70 ? "success" : "rejected");
+    
+    try {
+      const token = getAuthToken();
+      if (!token) {
+        throw new Error('No authentication token');
+      }
+
+      const response = await fetch('http://localhost:8000/v1/applications/apply', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          job_id: job.id,
+          cover_letter: coverLetter || null
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Application failed');
+      }
+
+      const applicationData = await response.json();
+      
+      // Get the match score from the response
+      const score = applicationData.resume_match_score || 0;
+      setMatchScore(score);
+      
+      // Wait a moment to show the score
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      
+      // Check if passed (minimum 20% as per your requirement)
+      if (score >= 20) {
+        setApplicationStatus("success");
+      } else {
+        setApplicationStatus("rejected");
+      }
+      
+    } catch (error) {
+      console.error('Application error:', error);
+      setError(error instanceof Error ? error.message : 'Application failed');
+      setApplicationStatus("idle");
+    }
   };
 
   const handleApplyClick = () => {
-    if (profileStatus.isComplete) {
-      setApplyDialogOpen(true);
-      setApplicationStatus("idle");
-      setCoverLetter("");
-      setMatchScore(null);
-    } else {
-      setApplyDialogOpen(true);
-      setApplicationStatus("idle");
-    }
+    // For now, always allow application since we're using basic auth profile
+    setApplyDialogOpen(true);
+    setApplicationStatus("idle");
+    setCoverLetter("");
+    setMatchScore(null);
   };
 
   const resetDialog = () => {
     setApplyDialogOpen(false);
     setApplicationStatus("idle");
+    setError(null);
+    setCoverLetter("");
+    setMatchScore(null);
   };
 
   if (loading) {
@@ -397,36 +439,10 @@ export default function JobDetailPage() {
                 </p>
               </div>
 
-              {/* Apply button with profile incomplete warning */}
-              {!profileStatus.isComplete && (
-                <div className="bg-amber-50/80 border border-amber-200 rounded-lg p-4 mb-4">
-                  <div className="flex gap-3">
-                    <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <h4 className="font-semibold text-amber-900 mb-1">
-                        Profile Incomplete
-                      </h4>
-                      <p className="text-sm text-amber-800 mb-2">
-                        Please complete your profile before applying.
-                      </p>
-                      <Link href="/candidate/profile">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="border-amber-300 text-amber-900 hover:bg-amber-100"
-                        >
-                          Complete Profile
-                        </Button>
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              )}
-
+              {/* Apply button - always enabled since we're using basic auth profile */}
               <Button
                 onClick={handleApplyClick}
                 className="w-full bg-[#B8915C] hover:bg-[#9F7A4F] text-white py-6 text-lg"
-                disabled={!profileStatus.isComplete}
               >
                 Apply for this position
               </Button>
@@ -445,43 +461,36 @@ export default function JobDetailPage() {
           </DialogHeader>
 
           <AnimatePresence mode="wait">
-            {!profileStatus.isComplete ? (
+            {error ? (
               <motion.div
-                key="incomplete"
+                key="error"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
                 className="space-y-4"
               >
-                <div className="bg-amber-50/80 border border-amber-200 rounded-lg p-4">
+                <div className="bg-red-50/80 border border-red-200 rounded-lg p-4">
                   <div className="flex gap-3">
-                    <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
                     <div>
-                      <h4 className="font-semibold text-amber-900 mb-2">
-                        Complete Your Profile First
+                      <h4 className="font-semibold text-red-900 mb-2">
+                        Application Failed
                       </h4>
-                      <p className="text-sm text-amber-800 mb-3">
-                        You need a complete profile (100%) to apply.
+                      <p className="text-sm text-red-800">
+                        {error}
                       </p>
-                      <div className="space-y-1 mb-3">
-                        <p className="text-sm font-medium text-amber-900">
-                          Missing:
-                        </p>
-                        <ul className="text-sm text-amber-800 list-disc list-inside">
-                          {profileStatus.missingFields.map((field) => (
-                            <li key={field}>{field}</li>
-                          ))}
-                        </ul>
-                      </div>
                     </div>
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Link href="/candidate/profile" className="flex-1">
-                    <Button className="w-full bg-[#B8915C] hover:bg-[#9F7A4F]">
-                      Complete Profile
-                    </Button>
-                  </Link>
+                  <Button
+                    onClick={() => {
+                      setError(null);
+                      setApplicationStatus("idle");
+                    }}
+                    className="flex-1 bg-[#B8915C] hover:bg-[#9F7A4F]"
+                  >
+                    Try Again
+                  </Button>
                   <Button
                     variant="outline"
                     onClick={resetDialog}
@@ -534,7 +543,7 @@ export default function JobDetailPage() {
                   Analyzing Your Profile
                 </h3>
                 <p className="text-[#5A534A] dark:text-slate-400 text-sm">
-                  Matching your experience with requirements...
+                  Analyzing your resume against job requirements...
                 </p>
                 {matchScore !== null && (
                   <motion.p
@@ -560,13 +569,16 @@ export default function JobDetailPage() {
                   Application Accepted!
                 </h3>
                 <p className="text-[#5A534A] dark:text-slate-400 mb-4">
-                  Match score: {matchScore}%
+                  Match score: {matchScore}% (minimum 20% required)
                 </p>
                 <div className="bg-[#B8915C]/10 p-3 rounded-lg mb-4 text-sm text-[#B8915C]">
-                  Next: Schedule your assessment test
+                  Congratulations! You've qualified for the assessment round.
                 </div>
                 <Button
-                  onClick={resetDialog}
+                  onClick={() => {
+                    resetDialog();
+                    router.push('/candidate/applications');
+                  }}
                   className="w-full bg-[#B8915C] hover:bg-[#9F7A4F]"
                 >
                   View Applications
@@ -586,8 +598,11 @@ export default function JobDetailPage() {
                   Application Not Matched
                 </h3>
                 <p className="text-[#5A534A] dark:text-slate-400 mb-4">
-                  Score: {matchScore}% (minimum 70% required)
+                  Score: {matchScore}% (minimum 20% required)
                 </p>
+                <div className="bg-red-50/80 border border-red-200 rounded-lg p-3 mb-4 text-sm text-red-700">
+                  Your resume didn't meet the minimum requirements for this position. Consider updating your profile or applying for other roles.
+                </div>
                 <Button
                   onClick={resetDialog}
                   variant="outline"

@@ -20,9 +20,10 @@ interface ScheduleDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSchedule: (date: Date, time: string) => void;
+  title?: string;
 }
 
-export function ScheduleDialog({ open, onOpenChange, onSchedule }: ScheduleDialogProps) {
+export function ScheduleDialog({ open, onOpenChange, onSchedule, title = "Schedule Assessment" }: ScheduleDialogProps) {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const [selectedTime, setSelectedTime] = useState("");
 
@@ -40,7 +41,7 @@ export function ScheduleDialog({ open, onOpenChange, onSchedule }: ScheduleDialo
       <DialogContent className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-white/20">
         <DialogHeader>
           <DialogTitle className="text-[#2D2A24] dark:text-white">
-            Schedule Assessment
+            {title}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-4">

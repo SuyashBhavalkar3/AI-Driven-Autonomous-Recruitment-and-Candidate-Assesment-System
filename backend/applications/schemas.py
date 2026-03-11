@@ -24,6 +24,11 @@ class ApplicationResponse(BaseModel):
     hr_notes: Optional[str]
     created_at: datetime
     
+    # Enhanced fields for frontend
+    job: Optional[Dict[str, Any]] = None
+    company: Optional[Dict[str, Any]] = None
+    status_display: Optional[Dict[str, Any]] = None
+    
     class Config:
         from_attributes = True
 
