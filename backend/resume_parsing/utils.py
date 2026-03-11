@@ -65,12 +65,20 @@ def parse_resume_with_groq(resume_text):
             "raw_output": result
         }
     
-def parse_resume(file,file_path):
+def parse_resume(file, file_path):
     try:
-        text = extract_text(file,file_path)
+        text = extract_text(file, file_path)
         print(f"[DEBUG] Extracted text length: {len(text)}")
+        
         result = parse_resume_with_groq(text)
-        print(f"[DEBUG] Parse result: {result}")
+        print(f"[DEBUG] Raw parse result: {result}")
+        
+        # Validate and normalize the parsed data
+        if isinstance(result, dict) and "error" not in result:
+            result = validate_and_normalize_parsed_data(result)
+            counts = count_parsed_items(result)
+            print(f"[DEBUG] Normalized data counts: {counts}")
+        
         return result
     except Exception as e:
         print(f"[ERROR] parse_resume failed: {str(e)}")
@@ -80,6 +88,7 @@ def parse_resume(file,file_path):
 
 from sqlalchemy.orm import Session
 from candidate_profile.models import Education, Experience, Project, Skill, Certification
+from resume_parsing.validation import validate_and_normalize_parsed_data, count_parsed_items
 
 def save_parsed_data(db: Session, candidate_id: int, parsed_data: dict):
     """
@@ -87,27 +96,36 @@ def save_parsed_data(db: Session, candidate_id: int, parsed_data: dict):
     into its respective table linked to the candidate.
     """
     try:
-        # --- Education (single object) ---
-        edu = parsed_data.get("education", {})
-        if edu and any(edu.values()):
-            db.add(Education(
-                candidate_id=candidate_id,
-                degree=edu.get("degree"),
-                institution=edu.get("institution"),
-                field_of_study=edu.get("field_of_study"),
-                start_date=edu.get("start_date"),
-                end_date=edu.get("end_date"),
-                grade=edu.get("grade"),
-                graduation_date=edu.get("graduation_date"),
-                marks=edu.get("marks"),
-                location=edu.get("location"),
-            ))
+        # --- Education (array of objects) ---
+        education_list = parsed_data.get("education", [])
+        # Ensure it's always a list
+        if isinstance(education_list, dict):
+            education_list = [education_list]
+        
+        for edu in education_list:
+            if edu and any(edu.values()):
+                db.add(Education(
+                    candidate_id=candidate_id,
+                    degree=edu.get("degree"),
+                    institution=edu.get("institution"),
+                    field_of_study=edu.get("field_of_study"),
+                    start_date=edu.get("start_date"),
+                    end_date=edu.get("end_date"),
+                    grade=edu.get("grade"),
+                    graduation_date=edu.get("graduation_date"),
+                    marks=edu.get("marks"),
+                    location=edu.get("location"),
+                ))
+                print(f"[DEBUG] Added education: {edu.get('degree')} at {edu.get('institution')}")
 
-        # --- Experience (single object or list) ---
-        exp_data = parsed_data.get("experience", {})
-        if exp_data and any(exp_data.values()):
-            experiences = exp_data if isinstance(exp_data, list) else [exp_data]
-            for exp in experiences:
+        # --- Experience (array of objects) ---
+        experience_list = parsed_data.get("experience", [])
+        # Ensure it's always a list
+        if isinstance(experience_list, dict):
+            experience_list = [experience_list]
+        
+        for exp in experience_list:
+            if exp and any(exp.values()):
                 db.add(Experience(
                     candidate_id=candidate_id,
                     company_name=exp.get("company_name"),
@@ -119,17 +137,24 @@ def save_parsed_data(db: Session, candidate_id: int, parsed_data: dict):
                     description=exp.get("description"),
                     marks=exp.get("marks"),
                 ))
+                print(f"[DEBUG] Added experience: {exp.get('job_title')} at {exp.get('company_name')}")
 
-        # --- Projects (list) ---
-        for proj in parsed_data.get("projects", []):
-            db.add(Project(
-                candidate_id=candidate_id,
-                project_name=proj.get("project_name"),
-                description=proj.get("description"),
-                github_url=proj.get("github_url"),
-            ))
+        # --- Projects (array of objects) ---
+        projects_list = parsed_data.get("projects", [])
+        if isinstance(projects_list, dict):
+            projects_list = [projects_list]
+        
+        for proj in projects_list:
+            if proj and proj.get("project_name"):
+                db.add(Project(
+                    candidate_id=candidate_id,
+                    project_name=proj.get("project_name"),
+                    description=proj.get("description"),
+                    github_url=proj.get("github_url"),
+                ))
+                print(f"[DEBUG] Added project: {proj.get('project_name')}")
 
-        # --- Skills (single object) ---
+        # --- Skills (single object with multiple fields) ---
         skills = parsed_data.get("skills", {})
         if skills and any(skills.values()):
             db.add(Skill(
@@ -141,22 +166,35 @@ def save_parsed_data(db: Session, candidate_id: int, parsed_data: dict):
                 tools_platforms=skills.get("tools_platforms"),
                 core_competencies=skills.get("core_competencies"),
             ))
+            print(f"[DEBUG] Added skills")
 
-        # --- Certifications (string or list) ---
-        certs = parsed_data.get("certifications", "")
-        if isinstance(certs, str) and certs.strip():
+        # --- Certifications (array of objects OR comma-separated string) ---
+        certs = parsed_data.get("certifications", [])
+        
+        # Handle array of objects (new format)
+        if isinstance(certs, list):
+            for cert in certs:
+                if isinstance(cert, dict):
+                    title = cert.get("title", "")
+                elif isinstance(cert, str):
+                    title = cert
+                else:
+                    continue
+                
+                if title and title.strip():
+                    db.add(Certification(candidate_id=candidate_id, title=title.strip()))
+                    print(f"[DEBUG] Added certification: {title}")
+        
+        # Handle comma-separated string (legacy format)
+        elif isinstance(certs, str) and certs.strip():
             for cert in certs.split(","):
                 cert = cert.strip()
                 if cert:
                     db.add(Certification(candidate_id=candidate_id, title=cert))
-        elif isinstance(certs, list):
-            for cert in certs:
-                title = cert if isinstance(cert, str) else cert.get("title", "")
-                if title:
-                    db.add(Certification(candidate_id=candidate_id, title=title))
+                    print(f"[DEBUG] Added certification: {cert}")
 
         db.commit()
-        print(f"[DEBUG] Successfully saved parsed data for candidate {candidate_id}")
+        print(f"[DEBUG] Successfully saved all parsed data for candidate {candidate_id}")
     except Exception as e:
         print(f"[ERROR] save_parsed_data failed: {str(e)}")
         import traceback
