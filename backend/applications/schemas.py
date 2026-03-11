@@ -22,6 +22,8 @@ class ApplicationResponse(BaseModel):
     interview_score: Optional[float]
     final_score: Optional[float]
     hr_notes: Optional[str]
+    assessment_data: Optional[Dict[str, Any]] = None
+    interview_feedback: Optional[Dict[str, Any]] = None
     assessment_available_at: Optional[datetime] = None
     assessment_expires_at: Optional[datetime] = None
     created_at: datetime
@@ -30,9 +32,7 @@ class ApplicationResponse(BaseModel):
         from_attributes = True
 
 class ApplicationDetailResponse(ApplicationResponse):
-    assessment_data: Optional[Dict[str, Any]] = None
     interview_transcript: Optional[Dict[str, Any]] = None
-    interview_feedback: Optional[Dict[str, Any]] = None
     job: Optional[Dict[str, Any]] = None
     
     class Config:

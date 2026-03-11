@@ -8,6 +8,7 @@ interface CandidateProctoringPanelProps {
   isCameraOn: boolean;
   isMicOn: boolean;
   stream?: MediaStream | null;
+  videoRef?: React.RefObject<HTMLVideoElement | null>;
   onCameraToggle: () => void;
   onMicToggle: () => void;
   error?: string | null;
@@ -19,13 +20,15 @@ export default function CandidateProctoringPanel({
   isCameraOn,
   isMicOn,
   stream,
+  videoRef: externalVideoRef,
   onCameraToggle,
   onMicToggle,
   error,
   canvasRef,
   isSpeaking,
 }: CandidateProctoringPanelProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const internalVideoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = externalVideoRef ?? internalVideoRef;
   const [connectionStatus, setConnectionStatus] = useState<"connected" | "disconnected">(
     stream ? "connected" : "disconnected"
   );

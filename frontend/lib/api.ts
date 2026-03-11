@@ -99,15 +99,15 @@ export interface HRApplication {
   interview_score: number | null;
   final_score: number | null;
   hr_notes?: string | null;
+  assessment_data?: Record<string, unknown> | null;
+  interview_feedback?: Record<string, unknown> | null;
   assessment_available_at?: string | null;
   assessment_expires_at?: string | null;
   created_at: string;
 }
 
 export interface HRApplicationDetail extends HRApplication {
-  assessment_data?: Record<string, unknown> | null;
   interview_transcript?: Record<string, unknown> | null;
-  interview_feedback?: Record<string, unknown> | null;
   job?: {
     id: number;
     title: string;
@@ -177,6 +177,7 @@ export interface AssessmentSubmitRequest {
     code: string;
     language: string;
   }>;
+  forced_by_violation?: boolean;
 }
 
 export interface AssessmentSubmitResponse {
@@ -599,7 +600,13 @@ export const hrActionsAPI = {
 
 // Proctoring API
 export const proctoringAPI = {
-  reportViolation: async (applicationId: number, violationType: string, timestamp: string, details: string) => {
+  reportViolation: async (
+    applicationId: number,
+    violationType: string,
+    timestamp: string,
+    details: string,
+    stage: "assessment" | "interview" = "assessment"
+  ) => {
     const res = await fetch(`${API_BASE_URL}/v1/proctoring/report-violation`, {
       method: 'POST',
       headers: getAuthHeaders(),
@@ -608,6 +615,7 @@ export const proctoringAPI = {
         violation_type: violationType,
         timestamp,
         details,
+        stage,
       }),
     });
     if (!res.ok) throw new Error('Failed to report violation');
@@ -619,6 +627,28 @@ export const proctoringAPI = {
       headers: getAuthHeaders(),
     });
     if (!res.ok) throw new Error('Failed to fetch violations');
+    return res.json();
+  },
+
+  terminateSession: async (
+    applicationId: number,
+    stage: "assessment" | "interview",
+    status: string,
+    reason: string,
+    violations: number
+  ) => {
+    const res = await fetch(`${API_BASE_URL}/v1/proctoring/terminate-session`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        application_id: applicationId,
+        stage,
+        status,
+        reason,
+        violations,
+      }),
+    });
+    if (!res.ok) throw new Error('Failed to terminate session');
     return res.json();
   },
 };

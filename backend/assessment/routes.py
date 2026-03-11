@@ -22,6 +22,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 INTERVIEW_THRESHOLD = 0  # Testing mode: every completed assessment can proceed to interview
+ASSESSMENT_VIOLATION_STATUS = "auto_submitted_violation"
 
 router = APIRouter(prefix="/v1/assessment", tags=["Assessment"], dependencies=[Depends(rate_limiter)])
 
@@ -52,6 +53,12 @@ async def _start_assessment(
     
     if not application:
         raise HTTPException(status_code=404, detail="Application not found")
+
+    if application.assessment_data and application.assessment_data.get("assessment_status") == ASSESSMENT_VIOLATION_STATUS:
+        raise HTTPException(
+            status_code=400,
+            detail="Assessment was already auto-submitted due to proctoring violations"
+        )
 
     if application.status != ApplicationStatus.ASSESSMENT_SCHEDULED:
         raise HTTPException(
@@ -295,10 +302,19 @@ async def submit_assessment(
     assessment.total_score = total_score
     assessment.completed = True
     assessment.completed_at = datetime.utcnow()
-    
+
+    assessment_data = dict(application.assessment_data or {})
+    assessment_data["violations"] = assessment_data.get("violations", [])
+    assessment_data["assessment_completed_at"] = assessment.completed_at.isoformat()
+    assessment_data["assessment_status"] = (
+        ASSESSMENT_VIOLATION_STATUS if submission.forced_by_violation else "completed"
+    )
+    assessment_data["locked_due_to_violation"] = submission.forced_by_violation
+    application.assessment_data = assessment_data
+
     # Update application
     application.assessment_score = total_score
-    qualifies_for_interview = total_score >= INTERVIEW_THRESHOLD
+    qualifies_for_interview = total_score >= INTERVIEW_THRESHOLD and not submission.forced_by_violation
     application.status = (
         ApplicationStatus.INTERVIEW_SCHEDULED
         if qualifies_for_interview

@@ -3,32 +3,83 @@ import { useState, useEffect, useCallback, useRef } from "react";
 interface UseProctoringProps {
   maxViolations?: number;
   violationCooldown?: number; // ms to ignore same violation type
+  active?: boolean;
+  requireFullscreen?: boolean;
+  videoElementRef?: React.RefObject<HTMLVideoElement | null>;
+  onViolation?: (violation: { reason: string; type: string; count: number }) => void;
 }
 
 export function useProctoring({ 
   maxViolations = 3, 
-  violationCooldown = 2000 
+  violationCooldown = 2000,
+  active = true,
+  requireFullscreen = false,
+  videoElementRef,
+  onViolation,
 }: UseProctoringProps = {}) {
   const [violations, setViolations] = useState(0);
   const [isOnline, setIsOnline] = useState(true);
   const [isTabVisible, setIsTabVisible] = useState(true);
   const [devToolsOpen, setDevToolsOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [faceCount, setFaceCount] = useState<number | null>(null);
 
   // Cooldown tracking
   const lastViolationTime = useRef<Record<string, number>>({});
 
   const addViolation = useCallback((reason: string, type: string = 'general') => {
+    if (!active) {
+      return;
+    }
+
     const now = Date.now();
     const last = lastViolationTime.current[type];
     if (last && now - last < violationCooldown) {
       return; // Skip if within cooldown
     }
     lastViolationTime.current[type] = now;
-    setViolations((prev) => prev + 1);
-  }, [violationCooldown]);
+    setViolations((prev) => {
+      const nextCount = prev + 1;
+      onViolation?.({ reason, type, count: nextCount });
+      return nextCount;
+    });
+  }, [active, onViolation, violationCooldown]);
+
+  const requestFullscreen = useCallback(async () => {
+    const root = document.documentElement as HTMLElement & {
+      webkitRequestFullscreen?: () => Promise<void>;
+      msRequestFullscreen?: () => Promise<void>;
+    };
+
+    if (document.fullscreenElement) {
+      setIsFullscreen(true);
+      return true;
+    }
+
+    try {
+      if (root.requestFullscreen) {
+        await root.requestFullscreen();
+      } else if (root.webkitRequestFullscreen) {
+        await root.webkitRequestFullscreen();
+      } else if (root.msRequestFullscreen) {
+        await root.msRequestFullscreen();
+      } else {
+        return false;
+      }
+
+      setIsFullscreen(true);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
 
   // Network monitoring
   useEffect(() => {
+    if (!active) {
+      return;
+    }
+
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => {
       setIsOnline(false);
@@ -40,10 +91,14 @@ export function useProctoring({
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, [addViolation]);
+  }, [active, addViolation]);
 
   // Tab visibility monitoring
   useEffect(() => {
+    if (!active) {
+      return;
+    }
+
     const handleVisibilityChange = () => {
       if (document.hidden) {
         setIsTabVisible(false);
@@ -54,10 +109,36 @@ export function useProctoring({
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [addViolation]);
+  }, [active, addViolation]);
+
+  useEffect(() => {
+    if (!active || !requireFullscreen) {
+      return;
+    }
+
+    const handleFullscreenChange = () => {
+      const currentlyFullscreen = Boolean(document.fullscreenElement);
+      setIsFullscreen(currentlyFullscreen);
+
+      if (!currentlyFullscreen) {
+        addViolation("Fullscreen mode exited", "fullscreen_exit");
+      }
+    };
+
+    setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, [active, addViolation, requireFullscreen]);
 
   // Copy/paste prevention
   useEffect(() => {
+    if (!active) {
+      return;
+    }
+
     const handleCopy = (e: ClipboardEvent) => {
       e.preventDefault();
       addViolation("Copy attempt detected", 'copy');
@@ -104,10 +185,14 @@ export function useProctoring({
       document.removeEventListener('contextmenu', handleContextMenu);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [addViolation]);
+  }, [active, addViolation]);
 
   // DevTools detection via window size (heuristic)
   useEffect(() => {
+    if (!active) {
+      return;
+    }
+
     const detectDevTools = () => {
       const widthThreshold = window.outerWidth - window.innerWidth > 200;
       const heightThreshold = window.outerHeight - window.innerHeight > 200;
@@ -128,9 +213,68 @@ export function useProctoring({
       window.removeEventListener('resize', detectDevTools);
       clearInterval(interval);
     };
-  }, [addViolation, devToolsOpen]);
+  }, [active, addViolation, devToolsOpen]);
 
-  const disqualify = useCallback((reason: string) => {
+  useEffect(() => {
+    if (!active || !videoElementRef?.current) {
+      setFaceCount(null);
+      return;
+    }
+
+    const detectorCtor = (window as Window & {
+      FaceDetector?: new (options?: { fastMode?: boolean; maxDetectedFaces?: number }) => {
+        detect: (input: CanvasImageSource) => Promise<Array<unknown>>;
+      };
+    }).FaceDetector;
+
+    if (!detectorCtor) {
+      return;
+    }
+
+    const detector = new detectorCtor({ fastMode: true, maxDetectedFaces: 5 });
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    let cancelled = false;
+
+    const detectFaces = async () => {
+      const video = videoElementRef.current;
+      if (cancelled || !video || !context || video.readyState < 2) {
+        return;
+      }
+
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      try {
+        const faces = await detector.detect(canvas);
+        if (cancelled) {
+          return;
+        }
+
+        setFaceCount(faces.length);
+
+        if (faces.length === 0) {
+          addViolation("Face not detected in camera feed", "face_not_detected");
+        } else if (faces.length > 1) {
+          addViolation("Multiple faces detected", "multiple_faces");
+        }
+      } catch {
+        // Ignore unsupported frames.
+      }
+    };
+
+    const interval = window.setInterval(() => {
+      void detectFaces();
+    }, 5000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [active, addViolation, videoElementRef]);
+
+  const disqualify = useCallback((_reason: string) => {
     // Force disqualification by setting violations to max
     setViolations(maxViolations);
   }, [maxViolations]);
@@ -140,7 +284,10 @@ export function useProctoring({
     isOnline,
     isTabVisible,
     devToolsOpen,
+    isFullscreen,
+    faceCount,
     addViolation,
     disqualify,
+    requestFullscreen,
   };
 }

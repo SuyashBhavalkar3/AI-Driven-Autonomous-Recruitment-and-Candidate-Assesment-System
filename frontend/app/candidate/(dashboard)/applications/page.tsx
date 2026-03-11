@@ -35,6 +35,10 @@ const formatStatus = (value: string) =>
     .join(" ");
 
 const isAssessmentWindowActive = (application: HRApplication) => {
+  if (application.assessment_data?.assessment_status === "auto_submitted_violation") {
+    return false;
+  }
+
   if (application.status !== "assessment_scheduled") {
     return false;
   }
@@ -44,6 +48,42 @@ const isAssessmentWindowActive = (application: HRApplication) => {
   }
 
   return new Date(application.assessment_expires_at).getTime() > Date.now();
+};
+
+const getAssessmentProgressLabel = (application: HRApplication) => {
+  if (application.assessment_data?.assessment_status === "auto_submitted_violation") {
+    return "Done (Auto-submitted due to violations)";
+  }
+
+  if (application.assessment_score !== null || application.status === "assessment_completed") {
+    return "Done";
+  }
+
+  if (application.status === "assessment_scheduled") {
+    return "Scheduled";
+  }
+
+  return "Pending";
+};
+
+const getInterviewProgressLabel = (application: HRApplication) => {
+  if (application.interview_feedback?.ai_interview_status === "auto_concluded_violation") {
+    return "Done (Auto-concluded due to violations)";
+  }
+
+  if (
+    application.status === "interview_completed" ||
+    application.status === "accepted" ||
+    application.interview_score !== null
+  ) {
+    return "Done";
+  }
+
+  if (application.status === "interview_scheduled") {
+    return "Scheduled";
+  }
+
+  return "Pending";
 };
 
 const formatValidityNote = (application: HRApplication) => {
@@ -193,10 +233,11 @@ export default function ApplicationsPage() {
                         </span>
                         <span className="flex items-center gap-1">
                           <CheckCircle className="h-4 w-4" />
-                          Assessment:{" "}
-                          {application.assessment_score !== null
-                            ? `${Math.round(application.assessment_score)}%`
-                            : "Pending"}
+                          Assessment: {getAssessmentProgressLabel(application)}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <CheckCircle className="h-4 w-4" />
+                          AI Interview: {getInterviewProgressLabel(application)}
                         </span>
                       </div>
 
@@ -209,6 +250,18 @@ export default function ApplicationsPage() {
                       {isAssessmentWindowActive(application) && (
                         <p className="mt-3 text-sm text-[#B8915C]">
                           This test is valid for 72 hours.
+                        </p>
+                      )}
+
+                      {application.assessment_data?.assessment_status === "auto_submitted_violation" && (
+                        <p className="mt-3 text-sm text-red-600 dark:text-red-400">
+                          Assessment ended automatically due to proctoring violations.
+                        </p>
+                      )}
+
+                      {application.interview_feedback?.ai_interview_status === "auto_concluded_violation" && (
+                        <p className="mt-3 text-sm text-red-600 dark:text-red-400">
+                          AI interview ended automatically due to proctoring violations.
                         </p>
                       )}
 
@@ -243,7 +296,8 @@ export default function ApplicationsPage() {
                           </Button>
                         </Link>
                       )}
-                      {application.status === "interview_scheduled" && (
+                      {application.status === "interview_scheduled" &&
+                        application.interview_feedback?.ai_interview_status !== "auto_concluded_violation" && (
                         <Link
                           href={`/candidate/interview?applicationId=${application.id}&company=${encodeURIComponent(
                             application.job?.title || "Tech Company"

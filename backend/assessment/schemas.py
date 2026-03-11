@@ -66,6 +66,7 @@ class SubmitAssessmentRequest(BaseModel):
     """Submit both MCQ answers and DSA code"""
     mcq_answers: List[MCQAnswerSubmission]
     dsa_submissions: List[DSACodeSubmission]
+    forced_by_violation: bool = False
 
 
 class AssessmentResultResponse(BaseModel):

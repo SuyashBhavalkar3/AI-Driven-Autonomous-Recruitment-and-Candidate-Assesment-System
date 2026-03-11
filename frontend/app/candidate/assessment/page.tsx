@@ -6,10 +6,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertCircle as AlertIcon,
   AlertTriangle,
+  Camera,
   CheckCircle,
   Clock,
+  Copy,
+  Expand,
   Loader2,
   Send,
+  ShieldAlert,
 } from "lucide-react";
 
 import {
@@ -19,11 +23,14 @@ import {
   AssessmentMCQQuestion,
   AssessmentSubmitResponse,
   profileAPI,
+  proctoringAPI,
 } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { useCamera } from "@/hooks/useCamera";
+import { useProctoring } from "@/hooks/useProctoring";
 
 type AssessmentQuestion =
   | {
@@ -109,6 +116,54 @@ export default function AssessmentPage() {
   const [applicationMeta, setApplicationMeta] = useState<{ company: string; position: string } | null>(null);
   const [assessmentQuestions, setAssessmentQuestions] = useState<AssessmentQuestion[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [proctoringNotice, setProctoringNotice] = useState<string | null>(null);
+  const [primaryAgreementAccepted, setPrimaryAgreementAccepted] = useState(false);
+  const [secondaryAgreementAccepted, setSecondaryAgreementAccepted] = useState(false);
+  const [blockedByViolation, setBlockedByViolation] = useState(false);
+  const {
+    videoRef,
+    isCameraOn,
+    stream,
+    error: cameraError,
+    retry: retryCamera,
+  } = useCamera();
+
+  const reportViolation = useCallback(
+    async (reason: string, type: string) => {
+      if (!applicationId) {
+        return;
+      }
+
+      try {
+        await proctoringAPI.reportViolation(
+          applicationId,
+          type,
+          new Date().toISOString(),
+          reason,
+          "assessment"
+        );
+      } catch (violationError) {
+        console.error("Failed to report assessment violation", violationError);
+      }
+    },
+    [applicationId]
+  );
+
+  const {
+    violations,
+    isOnline,
+    isFullscreen,
+    faceCount,
+    requestFullscreen,
+  } = useProctoring({
+    active: started && !submitted,
+    requireFullscreen: true,
+    videoElementRef: videoRef,
+    onViolation: ({ reason, type }) => {
+      setProctoringNotice(reason);
+      void reportViolation(reason, type);
+    },
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -159,6 +214,10 @@ export default function AssessmentPage() {
             company: detail.job?.title || "Tech Company",
             position: detail.job?.title || "Software Engineer",
           });
+          if (detail.assessment_data?.assessment_status === "auto_submitted_violation") {
+            setBlockedByViolation(true);
+            setError("This assessment was auto-submitted due to proctoring violations and cannot be restarted.");
+          }
         }
       } catch {
         // Keep interview fallbacks if detail loading fails.
@@ -200,9 +259,31 @@ export default function AssessmentPage() {
       return;
     }
 
+    if (blockedByViolation) {
+      setError("This assessment cannot be restarted because it was already auto-submitted after violations.");
+      return;
+    }
+
+    if (!primaryAgreementAccepted || !secondaryAgreementAccepted) {
+      setError("You must accept both proctoring notices before starting.");
+      return;
+    }
+
+    if (!stream || !isCameraOn) {
+      setError("Camera access is required before starting the assessment.");
+      return;
+    }
+
     try {
       setStartingAssessment(true);
       setError(null);
+      setProctoringNotice(null);
+
+      const fullscreenGranted = await requestFullscreen();
+      if (!fullscreenGranted) {
+        setError("Fullscreen permission is required to start the assessment.");
+        return;
+      }
 
       const response = await assessmentAPI.startAssessment(applicationId);
       const normalizedQuestions = normalizeQuestions(
@@ -223,7 +304,7 @@ export default function AssessmentPage() {
     }
   };
 
-  const handleSubmit = useCallback(async () => {
+  const handleSubmit = useCallback(async (forcedByViolation: boolean = false) => {
     if (!applicationId) {
       setError("Missing application ID. Cannot submit assessment.");
       return;
@@ -251,10 +332,16 @@ export default function AssessmentPage() {
       const result = await assessmentAPI.submitAssessment(applicationId, {
         mcq_answers,
         dsa_submissions,
+        forced_by_violation: forcedByViolation,
       });
 
       setSubmissionResult(result);
       setSubmitted(true);
+      if (forcedByViolation) {
+        setTimeout(() => {
+          router.push("/candidate/applications");
+        }, 1200);
+      }
     } catch (submitError) {
       setError(
         submitError instanceof Error ? submitError.message : "Failed to submit assessment."
@@ -262,7 +349,7 @@ export default function AssessmentPage() {
     } finally {
       setSubmitting(false);
     }
-  }, [applicationId, questions, answers]);
+  }, [applicationId, questions, answers, router]);
 
   useEffect(() => {
     if (started && !submitted && timeLeft > 0) {
@@ -274,6 +361,20 @@ export default function AssessmentPage() {
       void handleSubmit();
     }
   }, [handleSubmit, started, submitted, submitting, timeLeft]);
+
+  useEffect(() => {
+    if (started && !submitted && violations > 3 && !submitting) {
+      setError("Assessment auto-submitted due to repeated proctoring violations.");
+      void handleSubmit(true);
+    }
+  }, [handleSubmit, started, submitted, submitting, violations]);
+
+  useEffect(() => {
+    if (started && !submitted && !isCameraOn) {
+      setProctoringNotice("Webcam disabled during assessment.");
+      void reportViolation("Webcam disabled during assessment", "webcam_disabled");
+    }
+  }, [isCameraOn, reportViolation, started, submitted]);
 
   if (loadingProfile) {
     return (
@@ -328,6 +429,11 @@ export default function AssessmentPage() {
             <p className="mb-6 text-slate-600 dark:text-slate-400">
               Score: {submissionResult?.total_score ?? 0}/100
             </p>
+            {submissionResult?.next_status === "assessment_completed" && (
+              <p className="mb-4 text-sm text-amber-700 dark:text-amber-300">
+                Assessment ended and has been recorded. Redirecting to your applications.
+              </p>
+            )}
             {submissionResult?.qualifies_for_interview ? (
               <div className="space-y-3">
                 <p className="text-sm text-[#B8915C]">
@@ -377,12 +483,87 @@ export default function AssessmentPage() {
               </ul>
             </div>
 
+            <div className="space-y-3 rounded-lg border border-[#D6CDC2] bg-white/70 p-4 dark:border-slate-700 dark:bg-slate-900/60">
+              <p className="text-sm font-semibold text-[#2D2A24] dark:text-white">
+                Proctoring agreement
+              </p>
+              <p className="text-sm text-[#5A534A] dark:text-slate-400">
+                This is a proctored test. Webcam monitoring, tab switching detection, and
+                activity tracking are active. If more than 3 violations occur, the session will
+                automatically end.
+              </p>
+              <p className="text-sm text-[#5A534A] dark:text-slate-400">
+                This is a proctored test. Webcam monitoring, tab switching detection, and
+                activity tracking are active. If more than 3 violations occur, the session will
+                automatically end.
+              </p>
+              <label className="flex items-start gap-3 text-sm text-[#5A534A] dark:text-slate-400">
+                <input
+                  type="checkbox"
+                  checked={primaryAgreementAccepted}
+                  onChange={(event) => setPrimaryAgreementAccepted(event.target.checked)}
+                  className="mt-1"
+                />
+                I understand this assessment is fully proctored and may auto-submit on violation.
+              </label>
+              <label className="flex items-start gap-3 text-sm text-[#5A534A] dark:text-slate-400">
+                <input
+                  type="checkbox"
+                  checked={secondaryAgreementAccepted}
+                  onChange={(event) => setSecondaryAgreementAccepted(event.target.checked)}
+                  className="mt-1"
+                />
+                I agree to webcam monitoring, fullscreen enforcement, and activity tracking.
+              </label>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-[1.4fr_1fr]">
+              <div className="rounded-lg border border-[#D6CDC2] bg-white/70 p-4 dark:border-slate-700 dark:bg-slate-900/60">
+                <div className="mb-3 flex items-center gap-2">
+                  <ShieldAlert className="h-5 w-5 text-[#B8915C]" />
+                  <p className="text-sm font-semibold text-[#2D2A24] dark:text-white">
+                    Proctoring active after start
+                  </p>
+                </div>
+                <ul className="space-y-2 text-sm text-[#5A534A] dark:text-slate-400">
+                  <li className="flex items-center gap-2">
+                    <Camera className="h-4 w-4 text-[#B8915C]" />
+                    Webcam monitoring required
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Expand className="h-4 w-4 text-[#B8915C]" />
+                    Fullscreen enforcement enabled
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Copy className="h-4 w-4 text-[#B8915C]" />
+                    Copy, paste, tab switch, and suspicious actions are logged
+                  </li>
+                </ul>
+              </div>
+              <div className="overflow-hidden rounded-lg border border-[#D6CDC2] bg-black dark:border-slate-700">
+                {stream ? (
+                  <video ref={videoRef} autoPlay muted playsInline className="h-full min-h-[180px] w-full object-cover" />
+                ) : (
+                  <div className="flex min-h-[180px] items-center justify-center p-4 text-center text-sm text-slate-300">
+                    Webcam preview unavailable
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className="flex gap-3 rounded-lg bg-amber-50 p-4 dark:bg-amber-950/30">
               <AlertTriangle className="h-5 w-5 flex-shrink-0 text-amber-600" />
               <p className="text-sm text-amber-800 dark:text-amber-400">
-                Make sure your internet connection is stable before starting.
+                Make sure your internet connection is stable before starting. The test runs in a
+                proctored fullscreen session.
               </p>
             </div>
+
+            {cameraError && (
+              <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">
+                {cameraError}
+              </div>
+            )}
 
             {error && (
               <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">
@@ -390,20 +571,37 @@ export default function AssessmentPage() {
               </div>
             )}
 
-            <Button
-              onClick={handleStartAssessment}
-              disabled={startingAssessment}
-              className="h-12 w-full text-lg"
-            >
-              {startingAssessment ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Starting...
-                </>
-              ) : (
-                "Start Assessment"
-              )}
-            </Button>
+            <div className="flex gap-3">
+              <Button
+                onClick={handleStartAssessment}
+                disabled={
+                  startingAssessment ||
+                  !stream ||
+                  !isCameraOn ||
+                  blockedByViolation ||
+                  !primaryAgreementAccepted ||
+                  !secondaryAgreementAccepted
+                }
+                className="h-12 flex-1 text-lg"
+              >
+                {startingAssessment ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Starting...
+                  </>
+                ) : (
+                  "Start Assessment"
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void retryCamera()}
+                className="h-12 border-[#D6CDC2]"
+              >
+                Retry Camera
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -444,6 +642,57 @@ export default function AssessmentPage() {
             </span>
           </div>
         </div>
+
+        <div className="mb-6 grid gap-4 md:grid-cols-4">
+          <div className="rounded-lg border bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+            <p className="text-xs text-slate-500">Network</p>
+            <p className={`mt-1 text-sm font-semibold ${isOnline ? "text-green-600" : "text-red-500"}`}>
+              {isOnline ? "Stable" : "Offline"}
+            </p>
+          </div>
+          <div className="rounded-lg border bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+            <p className="text-xs text-slate-500">Fullscreen</p>
+            <p className={`mt-1 text-sm font-semibold ${isFullscreen ? "text-green-600" : "text-red-500"}`}>
+              {isFullscreen ? "Locked" : "Exited"}
+            </p>
+          </div>
+          <div className="rounded-lg border bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+            <p className="text-xs text-slate-500">Faces Detected</p>
+            <p className={`mt-1 text-sm font-semibold ${
+              faceCount === null || faceCount === 1 ? "text-green-600" : "text-red-500"
+            }`}>
+              {faceCount === null ? "Scanning" : faceCount}
+            </p>
+          </div>
+          <div className="rounded-lg border bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+            <p className="text-xs text-slate-500">Violations</p>
+            <p className={`mt-1 text-sm font-semibold ${violations > 0 ? "text-red-500" : "text-green-600"}`}>
+              {violations}
+            </p>
+          </div>
+        </div>
+
+        <div className="mb-6 overflow-hidden rounded-lg border bg-black dark:border-slate-800">
+          {stream ? (
+            <video
+              ref={videoRef}
+              autoPlay
+              muted
+              playsInline
+              className="h-44 w-full object-cover opacity-90"
+            />
+          ) : (
+            <div className="flex h-44 items-center justify-center text-sm text-slate-300">
+              Webcam feed unavailable during assessment
+            </div>
+          )}
+        </div>
+
+        {proctoringNotice && (
+          <div className="mb-6 rounded-lg bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+            {proctoringNotice}
+          </div>
+        )}
 
         <div className="mb-6 flex items-center gap-2">
           {questions.map((item, index) => (
