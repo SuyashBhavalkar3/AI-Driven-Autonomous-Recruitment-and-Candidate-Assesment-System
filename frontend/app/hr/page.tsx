@@ -1,4 +1,5 @@
 "use client";
+
 import { useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,6 @@ import {
   Award,
   Loader2,
 } from "lucide-react";
-import gsap from "gsap";
 
 // --- Data (ensure it's populated) ---
 const stats = [
