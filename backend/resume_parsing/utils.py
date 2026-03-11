@@ -90,13 +90,17 @@ def save_parsed_data(db: Session, candidate_id: int, parsed_data: dict):
         # --- Education (single object in your schema) ---
         edu = parsed_data.get("education", {})
         if edu and any(edu.values()):
+            # our SQLAlchemy model doesn't declare the extra keys that the
+            # LLM sometimes returns (graduation_date, location, marks), so
+            # translate them into the columns we do persist.  `graduation_date`
+            # is stored as `end_date` and `marks` as `grade`.
             db.add(Education(
                 candidate_id=candidate_id,
                 degree=edu.get("degree"),
                 institution=edu.get("institution"),
-                graduation_date=edu.get("graduation_date"),
-                location=edu.get("location"),
-                marks=edu.get("marks"),
+                start_date=edu.get("start_date") or edu.get("graduation_date"),
+                end_date=edu.get("end_date") or edu.get("graduation_date"),
+                grade=edu.get("marks"),
             ))
 
         # --- Experience (single object — wrap in list for flexibility) ---

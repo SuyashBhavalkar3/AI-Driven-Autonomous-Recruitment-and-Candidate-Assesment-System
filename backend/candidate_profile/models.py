@@ -34,6 +34,31 @@ class Education(Base):
     
     candidate = relationship("Candidate", back_populates="education")
 
+    # helper properties so other parts of the code can refer to fields
+    # that were originally returned by the LLM parse output.  We do not
+    # store these separately in the database; instead they map back to
+    # the existing columns.  This keeps the ORM constructor signature
+    # simple while still allowing `edu.graduation_date` etc. to be used.
+    @property
+    def graduation_date(self):
+        # the LLM often returns a graduation_date; our model stores
+        # it in `end_date` so surface that here for backwards
+        # compatibility (and for the schema/ATS scoring code).
+        return self.end_date
+
+    @property
+    def marks(self):
+        # alias for grade so the parsing/util code can continue to use
+        # the name that comes from the LLM output.
+        return self.grade
+
+    @property
+    def location(self):
+        # the parser returns a location but we currently do not persist it,
+        # so return None.  this keeps the pydantic schema happy when
+        # converting model instances to dicts.
+        return None
+
 class Skill(Base):
     __tablename__ = "skills"
 
