@@ -19,6 +19,7 @@ import {
   CheckCircle,
   AlertCircle,
   ArrowRight,
+  FileUser ,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,7 @@ const navItems = [
   { name: "Applications", href: "/candidate/applications", icon: FileText },
   { name: "Notifications", href: "/candidate/schedule", icon: Bell },
   { name: "Profile", href: "/candidate/profile", icon: Settings },
+  { name: "Resume", href: "/candidate/resume", icon: FileUser   },
 ];
 
 export default function CandidateLayout({
