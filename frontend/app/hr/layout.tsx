@@ -16,10 +16,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
-import { logout, getAuthToken } from "@/lib/auth";
-import { getCurrentUser } from "@/lib/api";
 
 const navItems = [
   { name: "Dashboard", href: "/hr", icon: Home },
@@ -32,22 +29,6 @@ const navItems = [
 export default function HRLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
-  const [userData, setUserData] = useState<any>(null);
-
-  useEffect(() => {
-    const loadUserData = async () => {
-      const token = getAuthToken();
-      if (token) {
-        try {
-          const user = await getCurrentUser(token);
-          setUserData(user);
-        } catch (error) {
-          console.error("Failed to load user data:", error);
-        }
-      }
-    };
-    loadUserData();
-  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
@@ -113,34 +94,6 @@ export default function HRLayout({ children }: { children: React.ReactNode }) {
               );
             })}
           </nav>
-
-          {/* User profile section */}
-          <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
-            <div className="flex items-center gap-3">
-              <Avatar className="h-10 w-10 ring-2 ring-blue-500/20">
-                <AvatarImage src="https://github.com/shadcn.png" />
-                <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-500 text-white">
-                  {userData?.name?.charAt(0) || "HR"}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
-                  {userData?.name || "Loading..."}
-                </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                  {userData?.email || ""}
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 transition-colors"
-                onClick={logout}
-              >
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
         </div>
       </aside>
 
