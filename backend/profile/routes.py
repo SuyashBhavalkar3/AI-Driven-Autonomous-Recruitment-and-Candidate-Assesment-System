@@ -60,6 +60,99 @@ def get_profile_status(current_user: User = Depends(get_current_user), db: Sessi
     
     return {"profile_completed": candidate.profile_completed}
 
+@router.get("")
+def get_candidate_profile(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Fetch complete candidate profile data"""
+    if current_user.is_employer:
+        raise HTTPException(status_code=403, detail="Only candidates can access this endpoint")
+    
+    candidate = db.query(Candidate).filter(Candidate.user_id == current_user.id).first()
+    
+    if not candidate:
+        return {
+            "profile_completed": False,
+            "profile_photo_url": None,
+            "phone": None,
+            "linkedin_url": None,
+            "github_url": None,
+            "bio": None,
+            "experiences": [],
+            "education": [],
+            "skills": [],
+            "projects": [],
+            "certifications": []
+        }
+    
+    # Fetch all related data
+    experiences = [
+        {
+            "company_name": exp.company_name,
+            "job_title": exp.job_title,
+            "location": exp.location,
+            "start_date": exp.start_date,
+            "end_date": exp.end_date,
+            "is_current": exp.is_current,
+            "description": exp.description,
+        }
+        for exp in candidate.experiences
+    ]
+    
+    education = [
+        {
+            "institution": edu.institution,
+            "degree": edu.degree,
+            "field_of_study": edu.field_of_study,
+            "start_date": edu.start_date,
+            "end_date": edu.end_date,
+            "grade": edu.grade,
+        }
+        for edu in candidate.education
+    ]
+    
+    skills = [
+        {
+            "languages": skill.languages,
+            "backend_technologies": skill.backend_technologies,
+            "databases": skill.databases,
+            "ai_ml_frameworks": skill.ai_ml_frameworks,
+            "tools_platforms": skill.tools_platforms,
+            "core_competencies": skill.core_competencies,
+        }
+        for skill in candidate.skills
+    ]
+    
+    projects = [
+        {
+            "title": project.title,
+            "description": project.description,
+            "link": project.link,
+        }
+        for project in candidate.projects
+    ]
+    
+    certifications = [
+        {
+            "title": cert.title,
+            "issuer": cert.issuer,
+            "date": cert.date,
+        }
+        for cert in candidate.certifications
+    ]
+    
+    return {
+        "profile_completed": candidate.profile_completed,
+        "profile_photo_url": candidate.profile_photo_url,
+        "phone": candidate.phone,
+        "linkedin_url": candidate.linkedin_url,
+        "github_url": candidate.github_url,
+        "bio": candidate.bio,
+        "experiences": experiences,
+        "education": education,
+        "skills": skills,
+        "projects": projects,
+        "certifications": certifications,
+    }
+
 @router.post("/save")
 async def save_profile(
     phone: Optional[str] = Form(None),

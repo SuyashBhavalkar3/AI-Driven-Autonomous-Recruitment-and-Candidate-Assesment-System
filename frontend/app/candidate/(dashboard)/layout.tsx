@@ -16,20 +16,14 @@ import {
   Settings,
   Sparkles,
   X,
-  CheckCircle,
-  AlertCircle,
-  ArrowRight,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { getAuthToken, logout } from "@/lib/auth";
 import { getCurrentUser } from "@/lib/api";
-import { calculateProfileCompletion } from "@/lib/profileCompletion";
 
 /* ------------------ Types ------------------ */
 interface User {
@@ -69,7 +63,7 @@ export default function CandidateLayout({
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  /* ------------------ Load user ------------------ */
+  /* ------------------ Load user and profile status ------------------ */
   useEffect(() => {
     let mounted = true;
 
@@ -141,36 +135,6 @@ export default function CandidateLayout({
     return pathname.startsWith(href);
   };
 
-  // Calculate profile completion
-  const profileStatus = calculateProfileCompletion({
-    fullName: user?.name || "",
-    email: user?.email || "",
-    phone: user?.phone || "",
-    location: user?.location || "",
-    bio: user?.bio || "",
-    skills: user?.skills || [],
-    resume: user?.resume || "",
-    experiences: user?.experiences || [],
-  });
-
-  // Get completion message based on percentage
-  const getCompletionMessage = (percentage: number) => {
-    if (percentage < 30) return "Start building your profile";
-    if (percentage < 60) return "Keep going! You're making progress";
-    if (percentage < 90) return "Almost there! Just a few more details";
-    return "Great job! Your profile is complete";
-  };
-
-  // Get next step based on missing fields
-  const getNextStep = () => {
-    const missingFields = profileStatus.missingFields;
-    if (missingFields.includes("resume")) return "Upload your resume";
-    if (missingFields.includes("skills")) return "Add your skills";
-    if (missingFields.includes("experience")) return "Add work experience";
-    if (missingFields.includes("location")) return "Add your location";
-    return "Complete your profile";
-  };
-
   return (
     <div className="min-h-screen bg-[#F9F6F0] dark:bg-slate-950">
       {/* Mobile menu */}
@@ -203,95 +167,6 @@ export default function CandidateLayout({
             </span>
             <Sparkles className="h-5 w-5 text-[#B8915C]" />
           </Link>
-
-          {/* Profile Completion Card - Always visible */}
-          <motion.div
-            ref={profileCardRef}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="mb-6"
-          >
-            <Link href="/candidate/profile">
-              <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-[#B8915C]/10 to-[#9F7A4F]/5 p-4 border border-[#B8915C]/20 hover:border-[#B8915C]/40 transition-all duration-300 cursor-pointer group">
-                {/* Decorative elements */}
-                <div className="absolute top-0 right-0 w-20 h-20 bg-[#B8915C]/10 rounded-full blur-2xl" />
-                <div className="absolute bottom-0 left-0 w-16 h-16 bg-[#9F7A4F]/10 rounded-full blur-xl" />
-                
-                <div className="relative">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      {profileStatus.percentage === 100 ? (
-                        <CheckCircle className="h-5 w-5 text-emerald-500" />
-                      ) : (
-                        <AlertCircle className="h-5 w-5 text-amber-500" />
-                      )}
-                      <h3 className="font-medium text-[#2D2A24] dark:text-white">
-                        Profile Completion
-                      </h3>
-                    </div>
-                    <Badge 
-                      variant="outline" 
-                      className={cn(
-                        "border-none",
-                        profileStatus.percentage === 100 
-                          ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10" 
-                          : "bg-amber-50 text-amber-600 dark:bg-amber-500/10"
-                      )}
-                    >
-                      {profileStatus.percentage}%
-                    </Badge>
-                  </div>
-
-                  <Progress 
-                    value={profileStatus.percentage} 
-                    className="h-2 mb-3 bg-[#D6CDC2]/30"
-                    indicatorClassName={cn(
-                      profileStatus.percentage === 100 
-                        ? "bg-emerald-500" 
-                        : "bg-gradient-to-r from-[#B8915C] to-[#9F7A4F]"
-                    )}
-                  />
-
-                  <p className="text-xs text-[#5A534A] dark:text-slate-400 mb-2">
-                    {getCompletionMessage(profileStatus.percentage)}
-                  </p>
-
-                  {profileStatus.percentage < 100 && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-[#B8915C]">
-                        Next: {getNextStep()}
-                      </span>
-                      <ArrowRight className="h-4 w-4 text-[#B8915C] opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </div>
-                  )}
-
-                  {/* Missing fields summary */}
-                  {profileStatus.missingFields.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-[#D6CDC2]/20">
-                      <p className="text-xs text-[#A69A8C] mb-2">Missing:</p>
-                      <div className="flex flex-wrap gap-1">
-                        {profileStatus.missingFields.slice(0, 3).map((field) => (
-                          <Badge 
-                            key={field}
-                            variant="outline" 
-                            className="text-[10px] bg-white/50 border-[#D6CDC2]/30 text-[#5A534A]"
-                          >
-                            {field}
-                          </Badge>
-                        ))}
-                        {profileStatus.missingFields.length > 3 && (
-                          <Badge variant="outline" className="text-[10px] bg-white/50 border-[#D6CDC2]/30">
-                            +{profileStatus.missingFields.length - 3} more
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Link>
-          </motion.div>
 
           {/* Nav */}
           <nav ref={navRef} className="flex-1 space-y-1">
@@ -374,7 +249,6 @@ export default function CandidateLayout({
               key={pathname}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -12 }}
               transition={{ duration: 0.25 }}
             >
               {children}
