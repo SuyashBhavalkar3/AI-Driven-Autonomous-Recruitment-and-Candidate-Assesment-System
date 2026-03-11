@@ -44,7 +44,6 @@ Structure:
     }}
 ],
 "certifications": "",
-"leadership_extracurricular": "",
 "github_profile_url": "",
 "linkedin_url": ""
 }}

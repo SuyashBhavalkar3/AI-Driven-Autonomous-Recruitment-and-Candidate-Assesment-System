@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON,Text
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON, Boolean
 from sqlalchemy.sql import func
 from authentication.database import Base
 from sqlalchemy.orm import relationship
@@ -12,59 +12,17 @@ class Candidate(Base):
     linkedin_url = Column(String(500), nullable=False)
     resume_url = Column(String(500), nullable=False)
     parsed_data = Column(JSON, nullable=True)
+    profile_completed = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="resumes")
-    education = relationship("Education", back_populates="candidate", cascade="all, delete-orphan")
-    experiences = relationship("Experience", back_populates="candidate", cascade="all, delete-orphan")
-    projects = relationship("Project", back_populates="candidate", cascade="all, delete-orphan")
-    skills = relationship("Skill", back_populates="candidate", cascade="all, delete-orphan")
-    certifications = relationship("Certification", back_populates="candidate", cascade="all, delete-orphan")
-
-# class Education(Base):
-#     __tablename__ = "educations"
-
-#     id = Column(Integer, primary_key=True, index=True)
-#     candidate_id = Column(Integer, ForeignKey("candidates.id"), nullable=False)
-#     degree = Column(String)
-#     institution = Column(String)
-#     graduation_date = Column(String)
-#     location = Column(String)
-
-#     candidate = relationship("Candidate", back_populates="education")
-
-# class Experience(Base):
-#     __tablename__ = "experiences"
-
-#     id = Column(Integer, primary_key=True, index=True)
-#     candidate_id = Column(Integer, ForeignKey("candidates.id"), nullable=False)
-#     company_name = Column(String)
-#     title = Column(String)
-#     start_date = Column(String)
-#     end_date = Column(String)
-#     location = Column(String)
-#     marks = Column(String)
-#     responsibilities = Column(Text)
-
-#     candidate = relationship("Candidate", back_populates="experiences")
-
-class Project(Base):
-    __tablename__ = "projects"
-
-    id = Column(Integer, primary_key=True, index=True)
-    candidate_id = Column(Integer, ForeignKey("candidates.id"), nullable=False)
-    project_name = Column(String)
-    description = Column(Text)
-    github_url = Column(String)
-
-    candidate = relationship("Candidate", back_populates="projects")
+    experiences = relationship("Experience", back_populates="candidate", cascade="all, delete")
+    education = relationship("Education", back_populates="candidate", cascade="all, delete")
+    skills = relationship("Skill", back_populates="candidate", cascade="all, delete")
+    projects = relationship("Project", back_populates="candidate", cascade="all, delete")
+    certifications = relationship("Certification", back_populates="candidate", cascade="all, delete")
+    certifications = relationship("Certification", back_populates="candidate", cascade="all, delete")
 
 
-class Certification(Base):
-    __tablename__ = "certifications"
-
-    id = Column(Integer, primary_key=True, index=True)
-    candidate_id = Column(Integer, ForeignKey("candidates.id"), nullable=False)
-    title = Column(String)
-
-    candidate = relationship("Candidate", back_populates="certifications")
+# re-export models defined in candidate_profile for convenience
+from candidate_profile.models import Experience, Education, Skill, Project, Certification

@@ -19,6 +19,12 @@ Base = declarative_base()
 def init_db():
     """Create tables if they don't exist"""
     from . import models
+    from resume_parsing import models as resume_models
+    from candidate_profile import models as candidate_models
+    from job_management_module import models as job_models
+    from applications import models as app_models
+    from assessment import models as assessment_models
+    from notifications import models as notif_models
     Base.metadata.create_all(bind=engine)
 
 

@@ -126,6 +126,23 @@ def get_skills(current_user: User = Depends(get_current_user), db: Session = Dep
         return []
     return candidate.skills
 
+@router.put("/skills/{skill_id}", response_model=SkillResponse)
+def update_skill(skill_id: int, skill: SkillCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    check_candidate_access(current_user)
+    candidate = db.query(Candidate).filter(Candidate.user_id == current_user.id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    
+    skill_obj = db.query(Skill).filter(Skill.id == skill_id, Skill.candidate_id == candidate.id).first()
+    if not skill_obj:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    
+    for key, value in skill.dict().items():
+        setattr(skill_obj, key, value)
+    db.commit()
+    db.refresh(skill_obj)
+    return skill_obj
+
 @router.delete("/skills/{skill_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_skill(skill_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     check_candidate_access(current_user)

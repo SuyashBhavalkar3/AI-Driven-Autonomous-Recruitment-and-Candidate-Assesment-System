@@ -4,10 +4,10 @@ from authentication.database import SessionLocal
 from .models import  Job
 from job_management_module.schemas import JobCreate,JobUpdate
 from fastapi import HTTPException
+from authentication.utils import get_current_user
+from authentication.models import User
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
-
-
 
 def get_db():
     db = SessionLocal()
@@ -18,16 +18,20 @@ def get_db():
 
 
 @router.post("/create")
-def create_job(job: JobCreate, db: Session = Depends(get_db)):
+def create_job(job: JobCreate, db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
+
+    if current_user.is_employer:
+        raise HTTPException(status_code=403, detail="Only HR Can do it")
 
     new_job = Job(
+        user_id = current_user.id,
         title=job.title,
         description=job.description,
         required_skills=job.required_skills,
         experience_required=job.experience_required,
         location=job.location,
         salary_range=job.salary_range,
-        created_by=1   # employer id (temporary)
+        #created_by=1   # employer id (temporary)
     )
 
     db.add(new_job)
@@ -38,8 +42,6 @@ def create_job(job: JobCreate, db: Session = Depends(get_db)):
         "message": "Job created successfully",
         "job": new_job
     }
-
-
 
 
 @router.get("/")
@@ -64,12 +66,17 @@ def get_job(job_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{job_id}")
-def update_job(job_id: int, job_update: JobUpdate, db: Session = Depends(get_db)):
+def update_job(job_id: int, job_update: JobUpdate, db: Session = Depends(get_db),
+               current_user: User = Depends(get_current_user)
+               ):
 
     job = db.query(Job).filter(Job.id == job_id).first()
 
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    
+    if job.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to update this job")
 
     for key, value in job_update.dict(exclude_unset=True).items():
         setattr(job, key, value)
@@ -82,12 +89,18 @@ def update_job(job_id: int, job_update: JobUpdate, db: Session = Depends(get_db)
 
 
 @router.delete("/{job_id}")
-def delete_job(job_id: int, db: Session = Depends(get_db)):
+def delete_job(job_id: int, db: Session = Depends(get_db),
+               current_user: User = Depends(get_current_user)
+                                            ):
 
     job = db.query(Job).filter(Job.id == job_id).first()
 
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    
+    if job.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this job")
+
 
     db.delete(job)
     db.commit()
