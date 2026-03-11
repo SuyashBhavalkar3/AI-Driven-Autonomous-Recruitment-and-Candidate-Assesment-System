@@ -37,6 +37,7 @@ import { calculateProfileCompletion, UserProfile } from "@/lib/profileCompletion
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import gsap from "gsap";
+import Loader from "@/components/Loader";
 
 // Mock user profile - replace with actual data from backend
 const mockUserProfile: UserProfile = {
@@ -104,7 +105,7 @@ export default function JobsPage() {
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [location, setLocation] = useState("");
-  const [jobType, setJobType] = useState("");
+  const [jobType, setJobType] = useState("all"); // Changed initial to "all"
   const [selectedJob, setSelectedJob] = useState<typeof jobs[0] | null>(null);
   const [applicationStatus, setApplicationStatus] =
     useState<ApplicationStatus>("idle");
@@ -119,8 +120,16 @@ export default function JobsPage() {
 
   // Simulate loading
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(timer);
+    const loadJobs = async () => {
+      try {
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        setLoading(false);
+      } catch (error) {
+        console.error('Failed to load jobs:', error);
+        setLoading(false);
+      }
+    };
+    loadJobs();
   }, []);
 
   // Generate decorative particles
@@ -173,18 +182,17 @@ export default function JobsPage() {
   }, [profileStatus.isComplete, selectedJob, router]);
 
   const filteredJobs = jobs.filter((job) => {
+    // Simplified filter: if jobType is "all", include all jobs; otherwise match type
     return (
       job.title.toLowerCase().includes(searchTerm.toLowerCase()) &&
       (location === "" ||
         job.location.toLowerCase().includes(location.toLowerCase())) &&
-      (jobType === "" || jobType === "all" || job.type === jobType)
+      (jobType === "all" || job.type === jobType)
     );
   });
 
   const handleApply = (job: typeof jobs[0]) => {
-    if (!profileStatus.isComplete) {
-      return;
-    }
+    // Removed early return – dialog opens even if profile incomplete
     setSelectedJob(job);
     setApplicationStatus("idle");
     setCoverLetter("");
@@ -202,174 +210,179 @@ export default function JobsPage() {
 
   return (
     <div className="relative min-h-screen bg-[#F9F6F0] dark:bg-slate-950 overflow-hidden">
-      {/* Decorative particles */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        {particles}
-      </div>
+      {loading && <Loader fullPage={true} />}
 
-      <div ref={cardsRef} className="relative z-10 max-w-6xl mx-auto px-4 py-8">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="mb-8 flex items-center justify-between"
-        >
-          <div>
-            <h1 className="font-serif text-4xl font-medium text-[#2D2A24] dark:text-white mb-2 flex items-center gap-2">
-              Find Your Next Opportunity
-              <Sparkles className="h-6 w-6 text-[#B8915C] animate-pulse" />
-            </h1>
-            <p className="text-[#5A534A] dark:text-slate-400">
-              Discover roles that match your expertise
-            </p>
+      {!loading && (
+        <>
+          {/* Decorative particles */}
+          <div className="absolute inset-0 pointer-events-none overflow-hidden">
+            {particles}
           </div>
-          <Badge
-            variant="outline"
-            className="border-[#B8915C]/30 text-[#B8915C] bg-white/50 backdrop-blur-sm"
-          >
-            {filteredJobs.length} jobs found
-          </Badge>
-        </motion.div>
 
-        {/* Search/Filter Card */}
-        <Card className="filter-card mb-8 border-none bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl shadow-2xl border border-white/20">
-          <CardContent className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#A69A8C]" />
-                <Input
-                  placeholder="Job title or keyword"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 bg-white/50 dark:bg-slate-800/50 border-[#D6CDC2] focus:border-[#B8915C]"
-                />
+          <div ref={cardsRef} className="relative z-10 max-w-6xl mx-auto px-4 py-8">
+            {/* Header */}
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6 }}
+              className="mb-8 flex items-center justify-between"
+            >
+              <div>
+                <h1 className="font-serif text-4xl font-medium text-[#2D2A24] dark:text-white mb-2 flex items-center gap-2">
+                  Find Your Next Opportunity
+                  <Sparkles className="h-6 w-6 text-[#B8915C] animate-pulse" />
+                </h1>
+                <p className="text-[#5A534A] dark:text-slate-400">
+                  Discover roles that match your expertise
+                </p>
               </div>
-              <div className="relative">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#A69A8C]" />
-                <Input
-                  placeholder="Location"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  className="pl-10 bg-white/50 dark:bg-slate-800/50 border-[#D6CDC2] focus:border-[#B8915C]"
-                />
-              </div>
-              <Select value={jobType} onValueChange={setJobType}>
-                <SelectTrigger className="bg-white/50 dark:bg-slate-800/50 border-[#D6CDC2] focus:border-[#B8915C]">
-                  <SelectValue placeholder="Job type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="Full-time">Full-time</SelectItem>
-                  <SelectItem value="Part-time">Part-time</SelectItem>
-                  <SelectItem value="Contract">Contract</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Jobs List */}
-        <div className="space-y-4">
-          {loading ? (
-            // Skeleton loaders
-            [...Array(3)].map((_, i) => (
-              <Card
-                key={i}
-                className="border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm animate-pulse"
+              <Badge
+                variant="outline"
+                className="border-[#B8915C]/30 text-[#B8915C] bg-white/50 backdrop-blur-sm"
               >
-                <CardContent className="p-6">
-                  <div className="flex gap-4">
-                    <div className="w-12 h-12 rounded-lg bg-[#D6CDC2] dark:bg-slate-700" />
-                    <div className="flex-1 space-y-2">
-                      <div className="h-5 w-48 bg-[#D6CDC2] dark:bg-slate-700 rounded" />
-                      <div className="h-4 w-32 bg-[#D6CDC2] dark:bg-slate-700 rounded" />
-                    </div>
+                {filteredJobs.length} jobs found
+              </Badge>
+            </motion.div>
+
+            {/* Search/Filter Card */}
+            <Card className="filter-card mb-8 border-none bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl shadow-2xl border border-white/20">
+              <CardContent className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#A69A8C]" />
+                    <Input
+                      placeholder="Job title or keyword"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10 bg-white/50 dark:bg-slate-800/50 border-[#D6CDC2] focus:border-[#B8915C]"
+                    />
                   </div>
-                </CardContent>
-              </Card>
-            ))
-          ) : (
-            filteredJobs.map((job) => (
-              <motion.div
-                key={job.id}
-                className="job-card"
-                whileHover={{ y: -2 }}
-                transition={{ type: "spring", stiffness: 400 }}
-              >
-                <Card className="border-none bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl shadow-2xl border border-white/20 hover:shadow-2xl transition-all duration-300">
-                  <CardContent className="p-6">
-                    <div className="flex gap-4">
-                      <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-[#B8915C] to-[#9F7A4F] flex items-center justify-center text-white font-semibold flex-shrink-0">
-                        {job.logo}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1">
-                            <h3 className="text-lg font-semibold text-[#2D2A24] dark:text-white">
-                              {job.title}
-                            </h3>
-                            <p className="text-[#5A534A] dark:text-slate-400 mt-1">
-                              {job.company}
-                            </p>
-                          </div>
-                          <Button
-                            onClick={() => handleApply(job)}
-                            size="sm"
-                            className="bg-[#B8915C] hover:bg-[#9F7A4F]"
-                          >
-                            Apply
-                          </Button>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-4 mt-3 text-sm text-[#5A534A] dark:text-slate-400">
-                          <span className="flex items-center gap-1">
-                            <MapPin className="h-4 w-4" />
-                            {job.location}
-                          </span>
-                          <Badge
-                            variant="secondary"
-                            className="bg-[#B8915C]/10 text-[#B8915C] border-none"
-                          >
-                            {job.workMode}
-                          </Badge>
-                          <span className="flex items-center gap-1">
-                            <DollarSign className="h-4 w-4" />
-                            {job.salary}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Briefcase className="h-4 w-4" />
-                            {job.experience}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-4 w-4" />
-                            {job.posted}
-                          </span>
-                        </div>
-                        <p className="mt-3 text-[#5A534A] dark:text-slate-400 text-sm line-clamp-2">
-                          {job.description}
-                        </p>
-                        <div className="flex flex-wrap gap-2 mt-3">
-                          {job.skills.map((skill) => (
-                            <Badge
-                              key={skill}
-                              variant="outline"
-                              className="border-[#B8915C]/30 text-[#B8915C]"
-                            >
-                              {skill}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))
-          )}
-        </div>
-      </div>
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#A69A8C]" />
+                    <Input
+                      placeholder="Location"
+                      value={location}
+                      onChange={(e) => setLocation(e.target.value)}
+                      className="pl-10 bg-white/50 dark:bg-slate-800/50 border-[#D6CDC2] focus:border-[#B8915C]"
+                    />
+                  </div>
+                  <Select value={jobType} onValueChange={setJobType}>
+                    <SelectTrigger className="bg-white/50 dark:bg-slate-800/50 border-[#D6CDC2] focus:border-[#B8915C]">
+                      <SelectValue placeholder="Job type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="Full-time">Full-time</SelectItem>
+                      <SelectItem value="Part-time">Part-time</SelectItem>
+                      <SelectItem value="Contract">Contract</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
 
-      {/* Application Dialog */}
+            {/* Jobs List */}
+            <div className="space-y-4">
+              {loading ? (
+                // Skeleton loaders
+                [...Array(3)].map((_, i) => (
+                  <Card
+                    key={i}
+                    className="border-none bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm animate-pulse"
+                  >
+                    <CardContent className="p-6">
+                      <div className="flex gap-4">
+                        <div className="w-12 h-12 rounded-lg bg-[#D6CDC2] dark:bg-slate-700" />
+                        <div className="flex-1 space-y-2">
+                          <div className="h-5 w-48 bg-[#D6CDC2] dark:bg-slate-700 rounded" />
+                          <div className="h-4 w-32 bg-[#D6CDC2] dark:bg-slate-700 rounded" />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              ) : (
+                filteredJobs.map((job) => (
+                  <motion.div
+                    key={job.id}
+                    className="job-card"
+                    whileHover={{ y: -2 }}
+                    transition={{ type: "spring", stiffness: 400 }}
+                  >
+                    <Card className="border-none bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl shadow-2xl border border-white/20 hover:shadow-2xl transition-all duration-300">
+                      <CardContent className="p-6">
+                        <div className="flex gap-4">
+                          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-[#B8915C] to-[#9F7A4F] flex items-center justify-center text-white font-semibold flex-shrink-0">
+                            {job.logo}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex-1">
+                                <h3 className="text-lg font-semibold text-[#2D2A24] dark:text-white">
+                                  {job.title}
+                                </h3>
+                                <p className="text-[#5A534A] dark:text-slate-400 mt-1">
+                                  {job.company}
+                                </p>
+                              </div>
+                              <Button
+                                onClick={() => handleApply(job)}
+                                size="sm"
+                                className="bg-[#B8915C] hover:bg-[#9F7A4F]"
+                              >
+                                Apply
+                              </Button>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-4 mt-3 text-sm text-[#5A534A] dark:text-slate-400">
+                              <span className="flex items-center gap-1">
+                                <MapPin className="h-4 w-4" />
+                                {job.location}
+                              </span>
+                              <Badge
+                                variant="secondary"
+                                className="bg-[#B8915C]/10 text-[#B8915C] border-none"
+                              >
+                                {job.workMode}
+                              </Badge>
+                              <span className="flex items-center gap-1">
+                                <DollarSign className="h-4 w-4" />
+                                {job.salary}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Briefcase className="h-4 w-4" />
+                                {job.experience}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Clock className="h-4 w-4" />
+                                {job.posted}
+                              </span>
+                            </div>
+                            <p className="mt-3 text-[#5A534A] dark:text-slate-400 text-sm line-clamp-2">
+                              {job.description}
+                            </p>
+                            <div className="flex flex-wrap gap-2 mt-3">
+                              {job.skills.map((skill) => (
+                                <Badge
+                                  key={skill}
+                                  variant="outline"
+                                  className="border-[#B8915C]/30 text-[#B8915C]"
+                                >
+                                  {skill}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                ))
+              )}
+            </div> {/* Closes space-y-4 */}
+          </div> {/* Closes cardsRef div */}
+        </>
+      )}
+
       <Dialog open={!!selectedJob} onOpenChange={() => setSelectedJob(null)}>
         <DialogContent className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-white/20 max-w-lg">
           <DialogHeader>

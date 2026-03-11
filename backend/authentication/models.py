@@ -20,3 +20,7 @@ class User(Base):
 
     resumes = relationship("Candidate", back_populates="user", cascade="all, delete")
     jobs = relationship("Job", back_populates="employer", cascade="all, delete")
+    candidate = relationship("Candidate", back_populates="user", uselist=False)
+
+
+    
