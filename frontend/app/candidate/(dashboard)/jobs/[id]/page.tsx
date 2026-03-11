@@ -28,67 +28,82 @@ import {
   Sparkles,
 } from "lucide-react";
 import { calculateProfileCompletion, UserProfile } from "@/lib/profileCompletion";
+import { getAuthToken } from "@/lib/auth";
 
-// Mock user profile (replace with actual data from auth context)
-const mockUserProfile: UserProfile = {
-  fullName: "John Doe",
-  email: "john@example.com",
-  phone: "",
-  location: "",
-  bio: "",
-  skills: [],
-  resume: "",
-  experiences: [],
-};
+// API response type
+interface ApiJob {
+  id: number;
+  title: string;
+  description: string;
+  required_skills: string[]; // JSON array
+  experience_required: number | null;
+  location: string | null;
+  salary_range: string | null;
+  created_at: string; // ISO date
+  created_by: number;
+}
 
-// Mock jobs data (same as in JobsPage)
-const jobs = [
-  {
-    id: 1,
-    title: "Senior Frontend Developer",
-    company: "TechCorp",
-    logo: "TC",
-    location: "San Francisco, CA",
-    workMode: "Remote",
-    salary: "$120k - $150k",
-    type: "Full-time",
-    posted: "2d ago",
-    description:
-      "We are looking for a senior frontend developer with React expertise to build next-generation web applications.",
-    skills: ["React", "TypeScript", "Tailwind", "Next.js"],
-    experience: "5+ years",
-  },
-  {
-    id: 2,
-    title: "Full Stack Engineer",
-    company: "InnovateLabs",
-    logo: "IL",
-    location: "New York, NY",
-    workMode: "Hybrid",
-    salary: "$130k - $160k",
-    type: "Full-time",
-    posted: "1w ago",
-    description:
-      "Join our team to build scalable applications that impact millions of users worldwide.",
-    skills: ["Node.js", "React", "PostgreSQL", "AWS"],
-    experience: "3-5 years",
-  },
-  {
-    id: 3,
-    title: "Backend Developer",
-    company: "DataFlow Inc",
-    logo: "DF",
-    location: "Austin, TX",
-    workMode: "On-site",
-    salary: "$110k - $140k",
-    type: "Full-time",
-    posted: "3d ago",
-    description:
-      "Build robust APIs and microservices for our data processing platform.",
-    skills: ["Python", "Django", "Redis", "Docker"],
-    experience: "4+ years",
-  },
-];
+// UI job type (similar to JobsPage)
+interface UiJob {
+  id: number;
+  title: string;
+  company: string;
+  logo: string;
+  location: string;
+  workMode: string;
+  salary: string;
+  type: string;
+  posted: string;
+  description: string;
+  skills: string[];
+  experience: string;
+}
+
+// Helper to compute relative time
+function getRelativeTime(dateString: string): string {
+  const now = new Date();
+  const past = new Date(dateString);
+  const diffMs = now.getTime() - past.getTime();
+  const diffSec = Math.round(diffMs / 1000);
+  const diffMin = Math.round(diffSec / 60);
+  const diffHr = Math.round(diffMin / 60);
+  const diffDays = Math.round(diffHr / 24);
+
+  if (diffDays > 30) return `${Math.round(diffDays / 30)}mo ago`;
+  if (diffDays > 0) return `${diffDays}d ago`;
+  if (diffHr > 0) return `${diffHr}h ago`;
+  if (diffMin > 0) return `${diffMin}m ago`;
+  return 'Just now';
+}
+
+function mapApiJobToUi(apiJob: ApiJob): UiJob {
+  const companyName = `Company ${apiJob.created_by}`;
+  const logo = companyName
+    .split(' ')
+    .map(word => word[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || "CO";
+
+  const exp = apiJob.experience_required ? `${apiJob.experience_required}+ years` : 'Not specified';
+  const workMode = "On-site"; // default
+  const type = "Full-time";   // default
+
+  return {
+    id: apiJob.id,
+    title: apiJob.title,
+    company: companyName,
+    logo: logo,
+    location: apiJob.location || 'Remote',
+    workMode: workMode,
+    salary: apiJob.salary_range || 'Not disclosed',
+    type: type,
+    posted: getRelativeTime(apiJob.created_at),
+    description: apiJob.description || 'No description provided.',
+    skills: apiJob.required_skills || [],
+    experience: exp,
+  };
+}
 
 type ApplicationStatus = "idle" | "applying" | "success" | "rejected";
 
@@ -97,8 +112,10 @@ export default function JobDetailPage() {
   const router = useRouter();
   const jobId = Number(params.id);
 
-  const [job, setJob] = useState<(typeof jobs)[0] | null>(null);
+  const [job, setJob] = useState<UiJob | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [applicationStatus, setApplicationStatus] =
     useState<ApplicationStatus>("idle");
   const [coverLetter, setCoverLetter] = useState("");
@@ -106,7 +123,7 @@ export default function JobDetailPage() {
   const [applyDialogOpen, setApplyDialogOpen] = useState(false);
   const [particles, setParticles] = useState<React.ReactNode[]>([]);
 
-  const profileStatus = calculateProfileCompletion(mockUserProfile);
+  const profileStatus = userProfile ? calculateProfileCompletion(userProfile) : { isComplete: false, percentage: 0, missingFields: [], completedFields: [] };
 
   // Generate decorative particles
   useEffect(() => {
@@ -125,14 +142,93 @@ export default function JobDetailPage() {
     setParticles(newParticles);
   }, []);
 
-  // Fetch job data
+  // Fetch job data and user profile from API
   useEffect(() => {
-    const foundJob = jobs.find((j) => j.id === jobId);
-    if (foundJob) {
-      setJob(foundJob);
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        
+        const token = getAuthToken();
+        if (!token) {
+          router.push('/login');
+          return;
+        }
+
+        // Fetch job data
+        const jobResponse = await fetch(`http://localhost:8000/jobs/${jobId}`);
+        if (!jobResponse.ok) {
+          if (jobResponse.status === 404) {
+            throw new Error('Job not found');
+          }
+          throw new Error(`Failed to fetch job: ${jobResponse.statusText}`);
+        }
+        const apiJob: ApiJob = await jobResponse.json();
+        const uiJob = mapApiJobToUi(apiJob);
+        setJob(uiJob);
+
+        // Fetch user profile
+        try {
+          const profileResponse = await fetch('http://localhost:8000/v1/profile/candidate', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          });
+          
+          if (profileResponse.ok) {
+            const profileData = await profileResponse.json();
+            // Map API profile to UserProfile format
+            const mappedProfile: UserProfile = {
+              fullName: profileData.name || '',
+              email: profileData.email || '',
+              phone: profileData.phone || '',
+              location: profileData.location || '',
+              bio: profileData.bio || '',
+              skills: profileData.skills || [],
+              resume: profileData.resume_url || '',
+              experiences: profileData.experiences || [],
+            };
+            setUserProfile(mappedProfile);
+          } else {
+            // If profile fetch fails, create empty profile
+            setUserProfile({
+              fullName: '',
+              email: '',
+              phone: '',
+              location: '',
+              bio: '',
+              skills: [],
+              resume: '',
+              experiences: [],
+            });
+          }
+        } catch (profileError) {
+          console.error('Error fetching profile:', profileError);
+          // Set empty profile on error
+          setUserProfile({
+            fullName: '',
+            email: '',
+            phone: '',
+            location: '',
+            bio: '',
+            skills: [],
+            resume: '',
+            experiences: [],
+          });
+        }
+        
+        setError(null);
+      } catch (err) {
+        console.error('Error fetching data:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load job');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (jobId) {
+      fetchData();
     }
-    setLoading(false);
-  }, [jobId]);
+  }, [jobId, router]);
 
   const submitApplication = async () => {
     setApplicationStatus("applying");
@@ -150,8 +246,6 @@ export default function JobDetailPage() {
       setCoverLetter("");
       setMatchScore(null);
     } else {
-      // Optionally, you could open a dialog warning instead of redirecting.
-      // For now, we'll just open the dialog and show the warning inside it.
       setApplyDialogOpen(true);
       setApplicationStatus("idle");
     }
@@ -170,15 +264,15 @@ export default function JobDetailPage() {
     );
   }
 
-  if (!job) {
+  if (error || !job) {
     return (
       <div className="min-h-screen bg-[#F9F6F0] dark:bg-slate-950 flex items-center justify-center">
         <Card className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border-none p-8 text-center">
           <h2 className="font-serif text-2xl text-[#2D2A24] dark:text-white mb-4">
-            Job Not Found
+            {error === 'Job not found' ? 'Job Not Found' : 'Error Loading Job'}
           </h2>
           <p className="text-[#5A534A] dark:text-slate-400 mb-6">
-            The job you're looking for doesn't exist or has been removed.
+            {error || "The job you're looking for doesn't exist or has been removed."}
           </p>
           <Link href="/jobs">
             <Button className="bg-[#B8915C] hover:bg-[#9F7A4F]">
@@ -341,7 +435,7 @@ export default function JobDetailPage() {
         </motion.div>
       </div>
 
-      {/* Application Dialog */}
+      {/* Application Dialog (same as before) */}
       <Dialog open={applyDialogOpen} onOpenChange={resetDialog}>
         <DialogContent className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-white/20 max-w-lg">
           <DialogHeader>

@@ -51,85 +51,128 @@ const mockUserProfile: UserProfile = {
   experiences: [],
 };
 
-const jobs = [
-  {
-    id: 1,
-    title: "Senior Frontend Developer",
-    company: "TechCorp",
-    logo: "TC",
-    location: "San Francisco, CA",
-    workMode: "Remote",
-    salary: "$120k - $150k",
-    type: "Full-time",
-    posted: "2d ago",
-    description:
-      "We are looking for a senior frontend developer with React expertise to build next-generation web applications.",
-    skills: ["React", "TypeScript", "Tailwind", "Next.js"],
-    experience: "5+ years",
-  },
-  {
-    id: 2,
-    title: "Full Stack Engineer",
-    company: "InnovateLabs",
-    logo: "IL",
-    location: "New York, NY",
-    workMode: "Hybrid",
-    salary: "$130k - $160k",
-    type: "Full-time",
-    posted: "1w ago",
-    description:
-      "Join our team to build scalable applications that impact millions of users worldwide.",
-    skills: ["Node.js", "React", "PostgreSQL", "AWS"],
-    experience: "3-5 years",
-  },
-  {
-    id: 3,
-    title: "Backend Developer",
-    company: "DataFlow Inc",
-    logo: "DF",
-    location: "Austin, TX",
-    workMode: "On-site",
-    salary: "$110k - $140k",
-    type: "Full-time",
-    posted: "3d ago",
-    description:
-      "Build robust APIs and microservices for our data processing platform.",
-    skills: ["Python", "Django", "Redis", "Docker"],
-    experience: "4+ years",
-  },
-];
+// Type for API job response
+interface ApiJob {
+  id: number;
+  title: string;
+  description: string;
+  required_skills: string[]; // JSON array from backend
+  experience_required: number | null;
+  location: string | null;
+  salary_range: string | null;
+  created_at: string; // ISO date string
+  created_by: number;
+}
 
-type ApplicationStatus = "idle" | "applying" | "success" | "rejected";
+// Type for UI job (extended with derived fields)
+interface UiJob {
+  id: number;
+  title: string;
+  company: string; // derived from created_by or placeholder
+  logo: string; // first two letters of company
+  location: string;
+  workMode: string; // default "On-site" (could be enhanced)
+  salary: string;
+  type: string; // default "Full-time"
+  posted: string; // relative time
+  description: string;
+  skills: string[];
+  experience: string; // formatted experience
+}
+
+// Helper to compute relative time from ISO date
+function getRelativeTime(dateString: string): string {
+  const now = new Date();
+  const past = new Date(dateString);
+  const diffMs = now.getTime() - past.getTime();
+  const diffSec = Math.round(diffMs / 1000);
+  const diffMin = Math.round(diffSec / 60);
+  const diffHr = Math.round(diffMin / 60);
+  const diffDays = Math.round(diffHr / 24);
+
+  if (diffDays > 30) return `${Math.round(diffDays / 30)}mo ago`;
+  if (diffDays > 0) return `${diffDays}d ago`;
+  if (diffHr > 0) return `${diffHr}h ago`;
+  if (diffMin > 0) return `${diffMin}m ago`;
+  return 'Just now';
+}
+
+// Map API job to UI job
+function mapApiJobToUi(apiJob: ApiJob): UiJob {
+  // Extract first two letters for logo (fallback to "CO")
+  const companyName = `Company ${apiJob.created_by}`; // Placeholder until we fetch employer info
+  const logo = companyName
+    .split(' ')
+    .map(word => word[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || "CO";
+
+  // Format experience
+  const exp = apiJob.experience_required ? `${apiJob.experience_required}+ years` : 'Not specified';
+
+  // Default workMode and type (can be extended if API provides these)
+  const workMode = "On-site"; // or derive from location if needed
+  const type = "Full-time";   // could be added to API later
+
+  return {
+    id: apiJob.id,
+    title: apiJob.title,
+    company: companyName,
+    logo: logo,
+    location: apiJob.location || 'Remote',
+    workMode: workMode,
+    salary: apiJob.salary_range || 'Not disclosed',
+    type: type,
+    posted: getRelativeTime(apiJob.created_at),
+    description: apiJob.description || 'No description provided.',
+    skills: apiJob.required_skills || [],
+    experience: exp,
+  };
+}
 
 export default function JobsPage() {
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [location, setLocation] = useState("");
-  const [jobType, setJobType] = useState("all"); // Changed initial to "all"
-  const [selectedJob, setSelectedJob] = useState<typeof jobs[0] | null>(null);
-  const [applicationStatus, setApplicationStatus] =
-    useState<ApplicationStatus>("idle");
+  const [jobType, setJobType] = useState("all");
+  const [selectedJob, setSelectedJob] = useState<UiJob | null>(null);
+  const [applicationStatus, setApplicationStatus] = useState<"idle" | "applying" | "success" | "rejected">("idle");
   const [coverLetter, setCoverLetter] = useState("");
   const [matchScore, setMatchScore] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [jobs, setJobs] = useState<UiJob[]>([]);
   const [particles, setParticles] = useState<React.ReactNode[]>([]);
   const cardsRef = useRef<HTMLDivElement>(null);
 
   // Check profile completion
   const profileStatus = calculateProfileCompletion(mockUserProfile);
 
-  // Simulate loading
+  // Fetch jobs from API
   useEffect(() => {
-    const loadJobs = async () => {
+    const fetchJobs = async () => {
       try {
-        await new Promise(resolve => setTimeout(resolve, 1200));
-        setLoading(false);
-      } catch (error) {
-        console.error('Failed to load jobs:', error);
+        setLoading(true);
+        const response = await fetch('http://localhost:8000/jobs/');
+        if (!response.ok) {
+          throw new Error(`Failed to fetch jobs: ${response.statusText}`);
+        }
+        const data = await response.json();
+        // data = { total_jobs: number, jobs: ApiJob[] }
+        const apiJobs: ApiJob[] = data.jobs || [];
+        const uiJobs = apiJobs.map(mapApiJobToUi);
+        setJobs(uiJobs);
+        setError(null);
+      } catch (err) {
+        console.error('Error fetching jobs:', err);
+        setError('Unable to load jobs. Please try again later.');
+      } finally {
         setLoading(false);
       }
     };
-    loadJobs();
+
+    fetchJobs();
   }, []);
 
   // Generate decorative particles
@@ -181,27 +224,27 @@ export default function JobsPage() {
     }
   }, [profileStatus.isComplete, selectedJob, router]);
 
+  // Filter jobs based on search, location, jobType
   const filteredJobs = jobs.filter((job) => {
-    // Simplified filter: if jobType is "all", include all jobs; otherwise match type
     return (
       job.title.toLowerCase().includes(searchTerm.toLowerCase()) &&
-      (location === "" ||
-        job.location.toLowerCase().includes(location.toLowerCase())) &&
+      (location === "" || job.location.toLowerCase().includes(location.toLowerCase())) &&
       (jobType === "all" || job.type === jobType)
     );
   });
-const handleApply = (job: typeof jobs[0]) => {
-  if (profileStatus.isComplete) {
-    // Navigate to job detail page
-    router.push(`/jobs/${job.id}`);
-  } else {
-    // Open application dialog with warning
-    setSelectedJob(job);
-    setApplicationStatus("idle");
-    setCoverLetter("");
-    setMatchScore(null);
-  }
-};
+
+  const handleApply = (job: UiJob) => {
+    if (profileStatus.isComplete) {
+      // Navigate to job detail page
+      router.push(`/jobs/${job.id}`);
+    } else {
+      // Open application dialog with warning
+      setSelectedJob(job);
+      setApplicationStatus("idle");
+      setCoverLetter("");
+      setMatchScore(null);
+    }
+  };
 
   const submitApplication = async () => {
     setApplicationStatus("applying");
@@ -285,10 +328,17 @@ const handleApply = (job: typeof jobs[0]) => {
               </CardContent>
             </Card>
 
+            {/* Error message if any */}
+            {error && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+                {error}
+              </div>
+            )}
+
             {/* Jobs List */}
             <div className="space-y-4">
               {loading ? (
-                // Skeleton loaders
+                // Skeleton loaders (should not appear because loading is false here, but kept for safety)
                 [...Array(3)].map((_, i) => (
                   <Card
                     key={i}
@@ -305,6 +355,18 @@ const handleApply = (job: typeof jobs[0]) => {
                     </CardContent>
                   </Card>
                 ))
+              ) : filteredJobs.length === 0 ? (
+                <Card className="border-none bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl">
+                  <CardContent className="p-12 text-center">
+                    <Building2 className="h-12 w-12 text-[#A69A8C] mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-[#2D2A24] dark:text-white mb-2">
+                      No jobs found
+                    </h3>
+                    <p className="text-[#5A534A] dark:text-slate-400">
+                      Try adjusting your search or filter criteria
+                    </p>
+                  </CardContent>
+                </Card>
               ) : (
                 filteredJobs.map((job) => (
                   <motion.div
@@ -382,11 +444,12 @@ const handleApply = (job: typeof jobs[0]) => {
                   </motion.div>
                 ))
               )}
-            </div> {/* Closes space-y-4 */}
-          </div> {/* Closes cardsRef div */}
+            </div>
+          </div>
         </>
       )}
 
+      {/* Application Dialog */}
       <Dialog open={!!selectedJob} onOpenChange={() => setSelectedJob(null)}>
         <DialogContent className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-white/20 max-w-lg">
           <DialogHeader>

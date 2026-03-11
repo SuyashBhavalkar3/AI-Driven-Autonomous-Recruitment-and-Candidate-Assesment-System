@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,7 +32,9 @@ import {
   Clock,
   Award,
   HelpCircle,
+  AlertCircle,
 } from "lucide-react";
+import { getAuthToken, getUserRole } from "@/lib/auth";
 
 // Sample data (in real app, this would come from an API)
 const assessmentQuestions: Array<{
@@ -113,6 +116,9 @@ const typeColors = {
 };
 
 export default function QuestionsPage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showDialog, setShowDialog] = useState(false);
   const [questionType, setQuestionType] = useState<"assessment" | "interview">(
     "assessment"
@@ -127,6 +133,34 @@ export default function QuestionsPage() {
     options: "",
     starterCode: "",
   });
+
+  // Check authentication and role
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const token = getAuthToken();
+        if (!token) {
+          router.push("/login");
+          return;
+        }
+
+        const role = getUserRole();
+        if (role !== "hr") {
+          setError("You don't have permission to view this page.");
+          setLoading(false);
+          return;
+        }
+
+        setLoading(false);
+      } catch (error) {
+        console.error('Authentication check failed:', error);
+        setError("Authentication failed.");
+        setLoading(false);
+      }
+    };
+    
+    checkAuth();
+  }, [router]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -144,6 +178,17 @@ export default function QuestionsPage() {
     });
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-stone-100 dark:from-stone-950 dark:to-stone-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500 mx-auto mb-4"></div>
+          <p className="text-stone-600 dark:text-stone-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-stone-100 dark:from-stone-950 dark:to-stone-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -159,6 +204,14 @@ export default function QuestionsPage() {
             </p>
           </div>
         </div>
+
+        {/* Error message */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 text-red-700">
+            <AlertCircle className="h-5 w-5 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
 
         <Tabs defaultValue="assessment" className="space-y-6">
           <TabsList className="bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm border border-stone-200 dark:border-stone-800">
