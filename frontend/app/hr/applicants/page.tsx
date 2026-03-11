@@ -1,473 +1,437 @@
 "use client";
 
-import { useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Search,
-  TrendingUp,
-  Mail,
-  Phone,
-  FileText,
-  Award,
-  CheckCircle,
-  Sparkles,
-  Calendar,
-  Briefcase,
-} from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import { AlertCircle, CheckCircle, FileText, Search, Sparkles, Target } from "lucide-react";
 
-type ApplicantStatus =
-  | "under_review"
-  | "assessment_completed"
-  | "interview_completed"
-  | "offered"
-  | "rejected";
+import { getCurrentUser, hrAPI, HRApplication, HRApplicationDetail, HRJob } from "@/lib/api";
+import { getAuthToken } from "@/lib/auth";
 
-type Applicant = {
-  id: number;
-  name: string;
-  email: string;
-  phone: string;
-  position: string;
-  appliedDate: string;
-  matchScore: number;
-  assessmentScore: number | null;
-  interviewScore: number | null;
-  status: ApplicantStatus;
-  experience: string;
-  skills: string[];
+const statusConfig: Record<string, string> = {
+  pending: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border-0",
+  resume_screened:
+    "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border-0",
+  assessment_scheduled:
+    "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border-0",
+  assessment_completed:
+    "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border-0",
+  interview_scheduled:
+    "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border-0",
+  interview_completed:
+    "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border-0",
+  accepted:
+    "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border-0",
+  rejected: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 border-0",
 };
 
-const applicants: Applicant[] = [
-  {
-    id: 1,
-    name: "John Doe",
-    email: "john@example.com",
-    phone: "+1 234 567 8900",
-    position: "Senior Frontend Developer",
-    appliedDate: "2024-02-15",
-    matchScore: 92,
-    assessmentScore: 88,
-    interviewScore: 90,
-    status: "interview_completed",
-    experience: "6 years",
-    skills: ["React", "TypeScript", "Next.js"],
-  },
-  {
-    id: 2,
-    name: "Jane Smith",
-    email: "jane@example.com",
-    phone: "+1 234 567 8901",
-    position: "Full Stack Engineer",
-    appliedDate: "2024-02-14",
-    matchScore: 88,
-    assessmentScore: 85,
-    interviewScore: null,
-    status: "assessment_completed",
-    experience: "5 years",
-    skills: ["Node.js", "React", "PostgreSQL"],
-  },
-  {
-    id: 3,
-    name: "Mike Johnson",
-    email: "mike@example.com",
-    phone: "+1 234 567 8902",
-    position: "Backend Developer",
-    appliedDate: "2024-02-16",
-    matchScore: 85,
-    assessmentScore: null,
-    interviewScore: null,
-    status: "under_review",
-    experience: "4 years",
-    skills: ["Python", "Django", "Redis"],
-  },
-  {
-    id: 4,
-    name: "Sarah Williams",
-    email: "sarah@example.com",
-    phone: "+1 234 567 8903",
-    position: "Senior Frontend Developer",
-    appliedDate: "2024-02-13",
-    matchScore: 95,
-    assessmentScore: 92,
-    interviewScore: 94,
-    status: "interview_completed",
-    experience: "7 years",
-    skills: ["React", "TypeScript", "GraphQL"],
-  },
-  {
-    id: 5,
-    name: "David Brown",
-    email: "david@example.com",
-    phone: "+1 234 567 8904",
-    position: "DevOps Engineer",
-    appliedDate: "2024-02-12",
-    matchScore: 78,
-    assessmentScore: 75,
-    interviewScore: null,
-    status: "assessment_completed",
-    experience: "5 years",
-    skills: ["Docker", "Kubernetes", "AWS"],
-  },
-];
+const labelForStatus = (status: string) =>
+  status
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 
-const statusConfig: Record<ApplicantStatus, { label: string; color: string }> = {
-  under_review: {
-    label: "Under Review",
-    color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border-0",
-  },
-  assessment_completed: {
-    label: "Assessment Done",
-    color: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border-0",
-  },
-  interview_completed: {
-    label: "Interview Done",
-    color: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border-0",
-  },
-  offered: {
-    label: "Offered",
-    color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border-0",
-  },
-  rejected: {
-    label: "Rejected",
-    color: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 border-0",
-  },
+const scoreForApplicant = (application: HRApplication | HRApplicationDetail) =>
+  application.final_score ??
+  application.interview_score ??
+  application.assessment_score ??
+  application.resume_match_score ??
+  0;
+
+type ApplicantWithJob = HRApplication & {
+  jobTitle: string;
 };
 
 export default function ApplicantsPage() {
+  const searchParams = useSearchParams();
+  const initialJobFilter = searchParams.get("job") ?? "all";
+
+  const [jobs, setJobs] = useState<HRJob[]>([]);
+  const [applications, setApplications] = useState<ApplicantWithJob[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [sortBy, setSortBy] = useState("matchScore");
   const [filterStatus, setFilterStatus] = useState("all");
-  const [selectedApplicant, setSelectedApplicant] = useState<Applicant | null>(
-    null
-  );
+  const [jobFilter, setJobFilter] = useState(initialJobFilter);
+  const [selectedApplicant, setSelectedApplicant] = useState<HRApplicationDetail | null>(null);
+  const [notes, setNotes] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState<"accepted" | "rejected" | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredAndSorted = applicants
-    .filter((app) => {
-      const matchesSearch =
-        app.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        app.position.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStatus =
-        filterStatus === "all" || app.status === filterStatus;
-      return matchesSearch && matchesStatus;
-    })
-    .sort((a, b) => {
-      if (sortBy === "matchScore") return b.matchScore - a.matchScore;
-      if (sortBy === "assessmentScore")
-        return (b.assessmentScore || 0) - (a.assessmentScore || 0);
-      if (sortBy === "interviewScore")
-        return (b.interviewScore || 0) - (a.interviewScore || 0);
-      return 0;
-    });
+  useEffect(() => {
+    let mounted = true;
 
-  const getOverallScore = (app: typeof applicants[0]) => {
-    const scores = [app.matchScore, app.assessmentScore, app.interviewScore].filter(
-      (s) => s !== null
-    ) as number[];
-    return scores.length > 0
-      ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
-      : app.matchScore;
+    async function loadApplicants() {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const token = getAuthToken();
+        if (!token) {
+          throw new Error("No authentication token found.");
+        }
+
+        const currentUser = await getCurrentUser(token);
+        const jobsResponse = await hrAPI.getJobs();
+        const ownedJobs = jobsResponse.jobs.filter((job) => job.created_by === currentUser.id);
+        const applicantGroups = await Promise.all(
+          ownedJobs.map(async (job) => {
+            const applicants = await hrAPI.getJobApplicants(job.id);
+            return applicants.map((application) => ({
+              ...application,
+              jobTitle: job.title,
+            }));
+          })
+        );
+
+        if (!mounted) {
+          return;
+        }
+
+        setJobs(ownedJobs);
+        setApplications(applicantGroups.flat());
+      } catch (loadError) {
+        if (mounted) {
+          setError(loadError instanceof Error ? loadError.message : "Failed to load applicants.");
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadApplicants();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const filteredApplications = useMemo(() => {
+    return applications
+      .filter((application) => {
+        const search = searchTerm.trim().toLowerCase();
+        const matchesSearch =
+          search.length === 0 ||
+          application.jobTitle.toLowerCase().includes(search) ||
+          String(application.candidate_id).includes(search) ||
+          String(application.id).includes(search);
+
+        const matchesStatus =
+          filterStatus === "all" || application.status === filterStatus;
+        const matchesJob =
+          jobFilter === "all" || String(application.job_id) === jobFilter;
+
+        return matchesSearch && matchesStatus && matchesJob;
+      })
+      .sort((left, right) => scoreForApplicant(right) - scoreForApplicant(left));
+  }, [applications, filterStatus, jobFilter, searchTerm]);
+
+  const openDetails = async (applicationId: number) => {
+    try {
+      setDetailsLoading(true);
+      const detail = await hrAPI.getApplicationDetail(applicationId);
+      setSelectedApplicant(detail);
+      setNotes(detail.hr_notes || "");
+    } catch (detailError) {
+      setError(
+        detailError instanceof Error
+          ? detailError.message
+          : "Failed to load applicant details."
+      );
+    } finally {
+      setDetailsLoading(false);
+    }
   };
 
-  const sendOffer = (applicantId: number) => {
-    console.log("Sending offer to:", applicantId);
-    setSelectedApplicant(null);
+  const handleStatusUpdate = async (status: "accepted" | "rejected") => {
+    if (!selectedApplicant) {
+      return;
+    }
+
+    try {
+      setActionLoading(status);
+      const updated = await hrAPI.updateApplicationStatus(selectedApplicant.id, {
+        status,
+        hr_notes: notes,
+      });
+
+      setApplications((current) =>
+        current.map((application) =>
+          application.id === updated.id ? { ...application, ...updated } : application
+        )
+      );
+      setSelectedApplicant((current) =>
+        current ? { ...current, ...updated, hr_notes: notes } : current
+      );
+    } catch (updateError) {
+      setError(
+        updateError instanceof Error
+          ? updateError.message
+          : "Failed to update application status."
+      );
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-            Applicants
-            <Sparkles className="h-5 w-5 text-indigo-500" />
-          </h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-1">
-            Review and manage all applicants
-          </p>
-        </div>
+    <div>
+      <div className="mb-8">
+        <h1 className="flex items-center gap-2 font-serif text-4xl font-medium text-[#2D2A24] dark:text-white">
+          Applicants
+          <Sparkles className="h-5 w-5 text-[#B8915C]" />
+        </h1>
+        <p className="mt-2 text-[#5A534A] dark:text-slate-400">
+          Review applications flowing into your posted jobs.
+        </p>
+      </div>
 
-        {/* Filters Card */}
-        <Card className="mb-6 border-0 shadow-lg bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
-          <CardContent className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Search */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  placeholder="Search by name or position..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500/20"
-                />
-              </div>
-              {/* Sort */}
-              <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500/20">
-                  <SelectValue placeholder="Sort by" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="matchScore">Match Score</SelectItem>
-                  <SelectItem value="assessmentScore">Assessment Score</SelectItem>
-                  <SelectItem value="interviewScore">Interview Score</SelectItem>
-                </SelectContent>
-              </Select>
-              {/* Filter by status */}
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500/20">
-                  <SelectValue placeholder="Filter by status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="under_review">Under Review</SelectItem>
-                  <SelectItem value="assessment_completed">Assessment Done</SelectItem>
-                  <SelectItem value="interview_completed">Interview Done</SelectItem>
-                  <SelectItem value="offered">Offered</SelectItem>
-                  <SelectItem value="rejected">Rejected</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+      {error && (
+        <Card className="mb-6 border-orange-200 bg-orange-50 dark:bg-orange-900/20">
+          <CardContent className="flex items-start gap-3 p-4">
+            <AlertCircle className="mt-0.5 h-5 w-5 text-orange-600 dark:text-orange-300" />
+            <p className="text-sm text-orange-700 dark:text-orange-300">{error}</p>
           </CardContent>
         </Card>
+      )}
 
-        {/* Applicant Cards */}
-        <div className="space-y-4">
-          {filteredAndSorted.map((applicant) => (
-            <Card
-              key={applicant.id}
-              className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm"
-            >
-              <CardContent className="p-6">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    {/* Name and Status */}
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-                        {applicant.name}
-                      </h3>
-                      <Badge className={statusConfig[applicant.status].color}>
-                        {statusConfig[applicant.status].label}
-                      </Badge>
-                    </div>
-                    {/* Position */}
-                    <p className="text-slate-600 dark:text-slate-400 mb-3">
-                      {applicant.position}
-                    </p>
+      <Card className="mb-6 border-none bg-white/70 shadow-lg backdrop-blur-sm dark:bg-slate-900/70">
+        <CardContent className="p-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#A69A8C]" />
+              <Input
+                placeholder="Search by candidate ID, application ID, or role..."
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                className="border-[#D6CDC2] bg-white pl-10 dark:bg-slate-800"
+              />
+            </div>
 
-                    {/* Scores */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-                      <div className="flex items-center gap-2 text-sm bg-slate-50 dark:bg-slate-800/50 p-2 rounded-md">
-                        <TrendingUp className="h-4 w-4 text-indigo-500" />
-                        <span className="text-slate-600 dark:text-slate-400">
-                          Match:
-                        </span>
-                        <span className="font-semibold text-indigo-600 dark:text-indigo-400">
-                          {applicant.matchScore}%
-                        </span>
+            <Select value={jobFilter} onValueChange={setJobFilter}>
+              <SelectTrigger className="border-[#D6CDC2] bg-white dark:bg-slate-800">
+                <SelectValue placeholder="Filter by job" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Jobs</SelectItem>
+                {jobs.map((job) => (
+                  <SelectItem key={job.id} value={String(job.id)}>
+                    {job.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="border-[#D6CDC2] bg-white dark:bg-slate-800">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                {Object.keys(statusConfig).map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {labelForStatus(status)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="space-y-4">
+        {loading
+          ? Array.from({ length: 4 }).map((_, index) => (
+              <Card
+                key={index}
+                className="border-none bg-white/70 shadow-lg backdrop-blur-sm dark:bg-slate-900/70"
+              >
+                <CardContent className="p-6">
+                  <Skeleton className="mb-3 h-6 w-48" />
+                  <Skeleton className="mb-2 h-4 w-72" />
+                  <Skeleton className="h-4 w-40" />
+                </CardContent>
+              </Card>
+            ))
+          : filteredApplications.map((application) => (
+              <Card
+                key={application.id}
+                className="border-none bg-white/70 shadow-lg transition-all duration-300 hover:shadow-xl dark:bg-slate-900/70"
+              >
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="mb-2 flex items-center gap-3">
+                        <h2 className="text-lg font-semibold text-[#2D2A24] dark:text-white">
+                          Candidate #{application.candidate_id}
+                        </h2>
+                        <Badge className={statusConfig[application.status] ?? statusConfig.pending}>
+                          {labelForStatus(application.status)}
+                        </Badge>
                       </div>
-                      {applicant.assessmentScore && (
-                        <div className="flex items-center gap-2 text-sm bg-slate-50 dark:bg-slate-800/50 p-2 rounded-md">
-                          <FileText className="h-4 w-4 text-purple-500" />
-                          <span className="text-slate-600 dark:text-slate-400">
-                            Assessment:
-                          </span>
-                          <span className="font-semibold text-purple-600 dark:text-purple-400">
-                            {applicant.assessmentScore}%
-                          </span>
+
+                      <p className="mb-3 text-[#5A534A] dark:text-slate-400">
+                        {application.jobTitle}
+                      </p>
+
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                        <div className="rounded-md bg-[#F1E9E0] p-3 text-sm dark:bg-slate-800/50">
+                          <div className="flex items-center gap-2 text-[#5A534A] dark:text-slate-400">
+                            <Target className="h-4 w-4 text-[#B8915C]" />
+                            Resume
+                          </div>
+                          <p className="mt-1 font-semibold text-[#2D2A24] dark:text-white">
+                            {Math.round(application.resume_match_score ?? 0)}%
+                          </p>
                         </div>
-                      )}
-                      {applicant.interviewScore && (
-                        <div className="flex items-center gap-2 text-sm bg-slate-50 dark:bg-slate-800/50 p-2 rounded-md">
-                          <Award className="h-4 w-4 text-amber-500" />
-                          <span className="text-slate-600 dark:text-slate-400">
-                            Interview:
-                          </span>
-                          <span className="font-semibold text-amber-600 dark:text-amber-400">
-                            {applicant.interviewScore}%
-                          </span>
+                        <div className="rounded-md bg-[#F1E9E0] p-3 text-sm dark:bg-slate-800/50">
+                          <div className="flex items-center gap-2 text-[#5A534A] dark:text-slate-400">
+                            <FileText className="h-4 w-4 text-[#B8915C]" />
+                            Assessment
+                          </div>
+                          <p className="mt-1 font-semibold text-[#2D2A24] dark:text-white">
+                            {application.assessment_score !== null
+                              ? `${Math.round(application.assessment_score)}%`
+                              : "Pending"}
+                          </p>
                         </div>
-                      )}
-                    </div>
-
-                    {/* Meta info: Overall score, experience, applied date */}
-                    <div className="flex flex-wrap items-center gap-3 text-sm">
-                      <div className="flex items-center gap-1">
-                        <span className="text-slate-500 dark:text-slate-400">
-                          Overall:
-                        </span>
-                        <span
-                          className={`font-bold px-2 py-0.5 rounded-full ${
-                            getOverallScore(applicant) >= 90
-                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
-                              : getOverallScore(applicant) >= 80
-                              ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300"
-                              : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
-                          }`}
-                        >
-                          {getOverallScore(applicant)}%
-                        </span>
-                      </div>
-                      <span className="text-slate-400">•</span>
-                      <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
-                        <Briefcase className="h-4 w-4" />
-                        {applicant.experience}
-                      </div>
-                      <span className="text-slate-400">•</span>
-                      <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
-                        <Calendar className="h-4 w-4" />
-                        Applied {new Date(applicant.appliedDate).toLocaleDateString()}
+                        <div className="rounded-md bg-[#F1E9E0] p-3 text-sm dark:bg-slate-800/50">
+                          <div className="flex items-center gap-2 text-[#5A534A] dark:text-slate-400">
+                            <CheckCircle className="h-4 w-4 text-[#B8915C]" />
+                            Interview
+                          </div>
+                          <p className="mt-1 font-semibold text-[#2D2A24] dark:text-white">
+                            {application.interview_score !== null
+                              ? `${Math.round(application.interview_score)}%`
+                              : "Pending"}
+                          </p>
+                        </div>
+                        <div className="rounded-md bg-[#F1E9E0] p-3 text-sm dark:bg-slate-800/50">
+                          <div className="flex items-center gap-2 text-[#5A534A] dark:text-slate-400">
+                            <Sparkles className="h-4 w-4 text-[#B8915C]" />
+                            Overall
+                          </div>
+                          <p className="mt-1 font-semibold text-[#2D2A24] dark:text-white">
+                            {Math.round(scoreForApplicant(application))}%
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Action Buttons */}
-                  <div className="flex gap-2">
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setSelectedApplicant(applicant)}
-                      className="border-slate-200 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                      onClick={() => openDetails(application.id)}
+                      className="border-[#D6CDC2] text-[#4A443C] hover:bg-[#F1E9E0]"
                     >
                       View Details
                     </Button>
-                    {applicant.status === "interview_completed" &&
-                      getOverallScore(applicant) >= 85 && (
-                        <Button
-                          size="sm"
-                          onClick={() => sendOffer(applicant.id)}
-                          className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white shadow-lg shadow-emerald-500/20 hover:shadow-xl transition-all duration-300"
-                        >
-                          <CheckCircle className="h-4 w-4 mr-2" />
-                          Send Offer
-                        </Button>
-                      )}
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                </CardContent>
+              </Card>
+            ))}
+      </div>
 
-        {/* Applicant Details Dialog */}
-        <Dialog open={!!selectedApplicant} onOpenChange={() => setSelectedApplicant(null)}>
-          <DialogContent className="max-w-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-0 shadow-2xl">
-            <DialogHeader>
-              <DialogTitle className="text-2xl font-semibold text-slate-900 dark:text-white">
-                {selectedApplicant?.name}
-              </DialogTitle>
-            </DialogHeader>
-            {selectedApplicant && (
+      {!loading && filteredApplications.length === 0 && (
+        <Card className="mt-4 border-none bg-white/70 shadow-lg backdrop-blur-sm dark:bg-slate-900/70">
+          <CardContent className="p-6 text-sm text-[#5A534A] dark:text-slate-400">
+            No applicants matched the selected filters.
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog open={!!selectedApplicant || detailsLoading} onOpenChange={() => setSelectedApplicant(null)}>
+        <DialogContent className="max-w-2xl border-none bg-white/95 shadow-2xl backdrop-blur-xl dark:bg-slate-900/95">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-semibold text-[#2D2A24] dark:text-white">
+              {detailsLoading
+                ? "Loading applicant details..."
+                : `Candidate #${selectedApplicant?.candidate_id}`}
+            </DialogTitle>
+          </DialogHeader>
+
+          {detailsLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-5 w-48" />
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-24 w-full" />
+            </div>
+          ) : (
+            selectedApplicant && (
               <div className="space-y-5">
-                {/* Contact Information */}
-                <div>
-                  <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">
-                    Contact
-                  </h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-indigo-500" />
-                      <span className="text-slate-700 dark:text-slate-300">
-                        {selectedApplicant.email}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Phone className="h-4 w-4 text-indigo-500" />
-                      <span className="text-slate-700 dark:text-slate-300">
-                        {selectedApplicant.phone}
-                      </span>
-                    </div>
-                  </div>
+                <div className="rounded-lg bg-[#F1E9E0] p-4 dark:bg-slate-800/50">
+                  <p className="font-medium text-[#2D2A24] dark:text-white">
+                    {selectedApplicant.job?.title || "Associated Job"}
+                  </p>
+                  <p className="mt-1 text-sm text-[#5A534A] dark:text-slate-400">
+                    {selectedApplicant.job?.location || "Location not provided"}
+                  </p>
                 </div>
 
-                {/* Skills */}
-                <div>
-                  <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">
-                    Skills
-                  </h3>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedApplicant.skills.map((skill) => (
-                      <Badge
-                        key={skill}
-                        variant="secondary"
-                        className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-0"
-                      >
-                        {skill}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Scores */}
-                <div>
-                  <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">
-                    Scores
-                  </h3>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="p-4 bg-indigo-50 dark:bg-indigo-950/30 rounded-lg text-center">
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Match</p>
-                      <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-                        {selectedApplicant.matchScore}%
+                <div className="grid grid-cols-2 gap-4">
+                  {[
+                    ["Resume Match", selectedApplicant.resume_match_score],
+                    ["Assessment", selectedApplicant.assessment_score],
+                    ["Interview", selectedApplicant.interview_score],
+                    ["Final Score", selectedApplicant.final_score],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-lg bg-[#F1E9E0] p-4 dark:bg-slate-800/50">
+                      <p className="text-xs uppercase tracking-wide text-[#A69A8C]">{label}</p>
+                      <p className="mt-2 text-2xl font-semibold text-[#2D2A24] dark:text-white">
+                        {value !== null && value !== undefined ? `${Math.round(Number(value))}%` : "N/A"}
                       </p>
                     </div>
-                    {selectedApplicant.assessmentScore && (
-                      <div className="p-4 bg-purple-50 dark:bg-purple-950/30 rounded-lg text-center">
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Assessment</p>
-                        <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                          {selectedApplicant.assessmentScore}%
-                        </p>
-                      </div>
-                    )}
-                    {selectedApplicant.interviewScore && (
-                      <div className="p-4 bg-amber-50 dark:bg-amber-950/30 rounded-lg text-center">
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Interview</p>
-                        <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
-                          {selectedApplicant.interviewScore}%
-                        </p>
-                      </div>
-                    )}
-                  </div>
+                  ))}
                 </div>
 
-                {/* Action Buttons */}
-                <div className="flex gap-3 pt-2">
-                  {selectedApplicant.status === "interview_completed" &&
-                    getOverallScore(selectedApplicant) >= 85 && (
-                      <Button
-                        onClick={() => sendOffer(selectedApplicant.id)}
-                        className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white shadow-lg"
-                      >
-                        <CheckCircle className="h-4 w-4 mr-2" />
-                        Send Offer
-                      </Button>
-                    )}
+                <div>
+                  <p className="mb-2 text-sm font-medium text-[#2D2A24] dark:text-white">
+                    HR Notes
+                  </p>
+                  <Textarea
+                    value={notes}
+                    onChange={(event) => setNotes(event.target.value)}
+                    placeholder="Add notes for this application..."
+                    className="min-h-28 border-[#D6CDC2] bg-white dark:bg-slate-800"
+                  />
+                </div>
+
+                <div className="flex gap-3">
+                  <Button
+                    onClick={() => handleStatusUpdate("accepted")}
+                    disabled={actionLoading !== null}
+                    className="bg-[#B8915C] hover:bg-[#9F7A4F]"
+                  >
+                    Accept
+                  </Button>
                   <Button
                     variant="outline"
-                    className="border-slate-200 dark:border-slate-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                    onClick={() => handleStatusUpdate("rejected")}
+                    disabled={actionLoading !== null}
+                    className="border-[#D6CDC2] text-[#4A443C] hover:bg-red-50 hover:text-red-600"
                   >
                     Reject
                   </Button>
                 </div>
               </div>
-            )}
-          </DialogContent>
-        </Dialog>
-      </div>
+            )
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

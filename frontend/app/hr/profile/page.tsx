@@ -1,230 +1,206 @@
 "use client";
 
-import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEffect, useState } from "react";
+import { Building, Mail, Save, User } from "lucide-react";
+
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { User, Mail, Phone, Building, Save, Upload, Sparkles } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { getCurrentUser, hrAPI } from "@/lib/api";
+import { getAuthToken, setUserData } from "@/lib/auth";
 
 export default function HRProfile() {
   const [isEditing, setIsEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
-    name: "HR Manager",
-    email: "hr@company.com",
-    phone: "+1 234 567 8900",
-    company: "TechCorp Inc.",
-    department: "Human Resources",
+    name: "",
+    email: "",
+    company_name: "",
+    company_description: "",
   });
 
-  const handleSave = () => {
-    console.log("Saving profile:", formData);
-    setIsEditing(false);
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadProfile() {
+      try {
+        const token = getAuthToken();
+        if (!token) {
+          throw new Error("No authentication token found.");
+        }
+
+        const user = await getCurrentUser(token);
+
+        if (mounted) {
+          setFormData({
+            name: user.name || "",
+            email: user.email || "",
+            company_name: user.company || "",
+            company_description: "",
+          });
+        }
+      } catch (loadError) {
+        if (mounted) {
+          setError(loadError instanceof Error ? loadError.message : "Failed to load profile.");
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadProfile();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      setError(null);
+
+      const updated = await hrAPI.updateProfile(formData);
+      setUserData(updated);
+      setIsEditing(false);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Failed to save profile.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-            My Profile
-            <Sparkles className="h-5 w-5 text-indigo-500" />
-          </h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-1">
-            Manage your personal information and account settings
-          </p>
-        </div>
+    <div>
+      <div className="mb-8">
+        <h1 className="font-serif text-4xl font-medium text-[#2D2A24] dark:text-white">
+          My Profile
+        </h1>
+        <p className="mt-2 text-[#5A534A] dark:text-slate-400">
+          Manage the account details used across the HR workspace.
+        </p>
+      </div>
 
-        {/* Profile Card */}
-        <Card className="border-0 shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
-          <CardHeader className="border-b border-slate-200 dark:border-slate-800 pb-6">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-xl font-medium text-slate-900 dark:text-white">
-                Personal Information
-              </CardTitle>
-              {!isEditing ? (
-                <Button
-                  onClick={() => setIsEditing(true)}
-                  variant="outline"
-                  className="border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
-                >
-                  Edit Profile
+      <Card className="border-none bg-white/70 shadow-lg backdrop-blur-sm dark:bg-slate-900/70">
+        <CardContent className="space-y-6 p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Avatar className="h-20 w-20 ring-2 ring-[#B8915C]/20">
+                <AvatarFallback className="bg-[#B8915C]/10 text-xl text-[#B8915C]">
+                  {formData.name?.charAt(0) || "H"}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <h2 className="text-xl font-semibold text-[#2D2A24] dark:text-white">
+                  {loading ? "Loading profile..." : formData.name || "HR User"}
+                </h2>
+                <p className="text-sm text-[#5A534A] dark:text-slate-400">{formData.email}</p>
+              </div>
+            </div>
+
+            {!isEditing ? (
+              <Button
+                variant="outline"
+                onClick={() => setIsEditing(true)}
+                className="border-[#D6CDC2] text-[#4A443C] hover:bg-[#F1E9E0]"
+              >
+                Edit Profile
+              </Button>
+            ) : (
+              <div className="flex gap-2">
+                <Button onClick={handleSave} disabled={saving} className="bg-[#B8915C] hover:bg-[#9F7A4F]">
+                  <Save className="mr-2 h-4 w-4" />
+                  {saving ? "Saving..." : "Save"}
                 </Button>
-              ) : (
-                <div className="flex gap-2">
-                  <Button
-                    onClick={handleSave}
-                    size="sm"
-                    className="bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-700 hover:to-indigo-600 text-white shadow-lg shadow-indigo-500/20"
-                  >
-                    <Save className="h-4 w-4 mr-2" />
-                    Save Changes
-                  </Button>
-                  <Button
-                    onClick={() => setIsEditing(false)}
-                    variant="outline"
-                    size="sm"
-                    className="border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="p-6 space-y-6">
-            {/* Avatar Section */}
-            <div className="flex items-center gap-6">
-              <div className="relative">
-                <Avatar className="h-24 w-24 ring-4 ring-indigo-500/20">
-                  <AvatarImage src="https://github.com/shadcn.png" />
-                  <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-indigo-600 text-white text-xl">
-                    {formData.name.charAt(0)}
-                  </AvatarFallback>
-                </Avatar>
-                {isEditing && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="absolute -bottom-2 -right-2 rounded-full p-2 h-8 w-8 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-md"
-                  >
-                    <Upload className="h-4 w-4 text-slate-600 dark:text-slate-300" />
-                  </Button>
-                )}
-              </div>
-              {isEditing && (
-                <div className="text-sm text-slate-500 dark:text-slate-400">
-                  Click the upload button to change your profile photo
-                </div>
-              )}
-            </div>
-
-            {/* Form Fields */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {/* Full Name */}
-              <div className="space-y-2">
-                <Label htmlFor="name" className="text-slate-700 dark:text-slate-300 text-sm font-medium">
-                  Full Name
-                </Label>
-                {isEditing ? (
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                    <Input
-                      id="name"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="pl-9 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500/20"
-                    />
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/50 p-2 rounded-md">
-                    <User className="h-4 w-4 text-indigo-500" />
-                    <span>{formData.name}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Email */}
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-slate-700 dark:text-slate-300 text-sm font-medium">
-                  Email
-                </Label>
-                {isEditing ? (
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                    <Input
-                      id="email"
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="pl-9 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500/20"
-                    />
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/50 p-2 rounded-md">
-                    <Mail className="h-4 w-4 text-indigo-500" />
-                    <span>{formData.email}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Phone */}
-              <div className="space-y-2">
-                <Label htmlFor="phone" className="text-slate-700 dark:text-slate-300 text-sm font-medium">
-                  Phone
-                </Label>
-                {isEditing ? (
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                    <Input
-                      id="phone"
-                      value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      className="pl-9 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500/20"
-                    />
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/50 p-2 rounded-md">
-                    <Phone className="h-4 w-4 text-indigo-500" />
-                    <span>{formData.phone}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Company */}
-              <div className="space-y-2">
-                <Label htmlFor="company" className="text-slate-700 dark:text-slate-300 text-sm font-medium">
-                  Company
-                </Label>
-                {isEditing ? (
-                  <div className="relative">
-                    <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                    <Input
-                      id="company"
-                      value={formData.company}
-                      onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                      className="pl-9 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500/20"
-                    />
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/50 p-2 rounded-md">
-                    <Building className="h-4 w-4 text-indigo-500" />
-                    <span>{formData.company}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Department */}
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="department" className="text-slate-700 dark:text-slate-300 text-sm font-medium">
-                  Department
-                </Label>
-                {isEditing ? (
-                  <Input
-                    id="department"
-                    value={formData.department}
-                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                    className="border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500/20"
-                  />
-                ) : (
-                  <div className="text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/50 p-2 rounded-md">
-                    {formData.department}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Optional: Add a note about when the profile was last updated */}
-            {!isEditing && (
-              <div className="text-xs text-slate-400 dark:text-slate-500 pt-2 border-t border-slate-200 dark:border-slate-800">
-                Last updated: Today at 10:30 AM
+                <Button
+                  variant="outline"
+                  onClick={() => setIsEditing(false)}
+                  className="border-[#D6CDC2] text-[#4A443C]"
+                >
+                  Cancel
+                </Button>
               </div>
             )}
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="name">Full Name</Label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#A69A8C]" />
+                <Input
+                  id="name"
+                  disabled={!isEditing || loading}
+                  value={formData.name}
+                  onChange={(event) =>
+                    setFormData((current) => ({ ...current, name: event.target.value }))
+                  }
+                  className="border-[#D6CDC2] bg-white pl-9 dark:bg-slate-800"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#A69A8C]" />
+                <Input
+                  id="email"
+                  type="email"
+                  disabled={!isEditing || loading}
+                  value={formData.email}
+                  onChange={(event) =>
+                    setFormData((current) => ({ ...current, email: event.target.value }))
+                  }
+                  className="border-[#D6CDC2] bg-white pl-9 dark:bg-slate-800"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="company_name">Company Name</Label>
+              <div className="relative">
+                <Building className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#A69A8C]" />
+                <Input
+                  id="company_name"
+                  disabled={!isEditing || loading}
+                  value={formData.company_name}
+                  onChange={(event) =>
+                    setFormData((current) => ({ ...current, company_name: event.target.value }))
+                  }
+                  className="border-[#D6CDC2] bg-white pl-9 dark:bg-slate-800"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="company_description">Company Description</Label>
+              <Textarea
+                id="company_description"
+                disabled={!isEditing || loading}
+                value={formData.company_description}
+                onChange={(event) =>
+                  setFormData((current) => ({
+                    ...current,
+                    company_description: event.target.value,
+                  }))
+                }
+                placeholder="Describe your company or hiring function..."
+                className="min-h-32 border-[#D6CDC2] bg-white dark:bg-slate-800"
+              />
+            </div>
+          </div>
+
+          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+        </CardContent>
+      </Card>
     </div>
   );
 }
