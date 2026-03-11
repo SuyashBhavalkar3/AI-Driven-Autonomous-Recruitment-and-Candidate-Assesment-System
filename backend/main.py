@@ -27,6 +27,11 @@ app = FastAPI(
     description="Autonomous recruitment and candidate assessment system",
     version="2.0.0"
 )
+app = FastAPI(
+    title="AI Recruitment System",
+    description="Autonomous recruitment and candidate assessment system",
+    version="2.0.0"
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -55,6 +60,25 @@ def read_root():
             "proctoring": "/v1/proctoring",
             "resume": "/v1/resume",
             "resume_analysis": "/v1/resume-analysis",
+            "interview": "/interview"
+        }
+    }
+    return {
+        "status": "AI Recruitment System Running",
+        "version": "2.0.0",
+        "endpoints": {
+            "auth": "/v1/auth",
+            "jobs": "/v1/jobs",
+            "applications": "/v1/applications",
+            "profile": "/v1/profile",
+            "candidate": "/v1/candidate",
+            "scheduling": "/v1/scheduling",
+            "assessment": "/v1/assessment",
+            "candidate_dashboard": "/v1/candidate/dashboard",
+            "hr_dashboard": "/v1/hr/dashboard",
+            "hr_actions": "/v1/hr/actions",
+            "proctoring": "/v1/proctoring",
+            "resume": "/v1/resume",
             "interview": "/interview"
         }
     }

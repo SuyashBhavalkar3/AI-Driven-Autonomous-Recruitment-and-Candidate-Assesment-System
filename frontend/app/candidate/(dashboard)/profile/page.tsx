@@ -329,6 +329,7 @@ export default function CandidateProfile() {
       setProfilePhotoFile(file);
       const reader = new FileReader();
       reader.onloadend = () => setProfilePhoto(reader.result as string);
+      reader.onloadend = () => setProfilePhoto(reader.result as string);
       reader.readAsDataURL(file);
       setErrors((prev) => ({ ...prev, profilePhoto: undefined }));
       setTouched((prev) => ({ ...prev, profilePhoto: true }));
@@ -341,6 +342,8 @@ export default function CandidateProfile() {
       setResumeFile(file);
       setErrors((prev) => ({ ...prev, resume: undefined }));
       setTouched((prev) => ({ ...prev, resume: true }));
+      setErrors((prev) => ({ ...prev, resume: undefined }));
+      setTouched((prev) => ({ ...prev, resume: true }));
     }
   };
 
@@ -348,7 +351,9 @@ export default function CandidateProfile() {
     if (skillInput.trim() && !formData.skills.includes(skillInput.trim())) {
       const updatedSkills = [...formData.skills, skillInput.trim()];
       setFormData((prev) => ({ ...prev, skills: updatedSkills }));
+      setFormData((prev) => ({ ...prev, skills: updatedSkills }));
       setSkillInput("");
+      setErrors(validateForm());
       setErrors(validateForm());
     }
   };
@@ -493,6 +498,10 @@ export default function CandidateProfile() {
       }
     } else {
       const firstErrorField = Object.keys(validationErrors)[0];
+      document.getElementById(`field-${firstErrorField}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
       document.getElementById(`field-${firstErrorField}`)?.scrollIntoView({
         behavior: "smooth",
         block: "center",
