@@ -1,5 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -12,6 +14,10 @@ class User(Base):
     email = Column(String, unique=True, nullable=False, index=True)
     hashed_password = Column(String, nullable=False)
     is_employer = Column(Boolean, default=False, nullable=False)
+    company_name = Column(String, nullable=True)
+    company_website = Column(String, nullable=True)
+    company_description = Column(Text, nullable=True)
+    profile_completed = Column(Boolean, default=False)
     company_name = Column(String, nullable=True)
     company_website = Column(String, nullable=True)
     company_description = Column(Text, nullable=True)

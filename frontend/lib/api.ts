@@ -78,6 +78,7 @@ export async function getCurrentUser(token: string): Promise<UserData> {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     },
   });
 
@@ -88,6 +89,7 @@ export async function getCurrentUser(token: string): Promise<UserData> {
   }
 
   if (!response.ok) {
+    throw new Error("Failed to fetch user data");
     throw new Error("Failed to fetch user data");
   }
 

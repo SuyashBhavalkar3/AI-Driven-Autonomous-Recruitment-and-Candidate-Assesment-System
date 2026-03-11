@@ -16,9 +16,27 @@ from candidate_dashboard.routes import router as candidate_dashboard_router
 from hr_dashboard.routes import router as hr_dashboard_router
 from hr_actions.routes import router as hr_actions_router
 from proctoring.routes import router as proctoring_router
+from authentication.database import engine, Base, init_db
+from authentication.routes import router as auth_router
+from resume_parsing.routes import router as resume_router
+from job_management_module.routes import router as jobs_router
+from applications.routes import router as applications_router
+from profile.routes import router as profile_router
+from candidate_profile.routes import router as candidate_router
+from scheduling.routes import router as scheduling_router
+from assessment.routes import router as assessment_router
+from candidate_dashboard.routes import router as candidate_dashboard_router
+from hr_dashboard.routes import router as hr_dashboard_router
+from hr_actions.routes import router as hr_actions_router
+from proctoring.routes import router as proctoring_router
 
 Base.metadata.create_all(bind=engine)
 
+app = FastAPI(
+    title="AI Recruitment System",
+    description="Autonomous recruitment and candidate assessment system",
+    version="2.0.0"
+)
 app = FastAPI(
     title="AI Recruitment System",
     description="Autonomous recruitment and candidate assessment system",
@@ -35,6 +53,25 @@ app.add_middleware(
 
 @app.get("/")
 def read_root():
+    return {
+        "status": "AI Recruitment System Running",
+        "version": "2.0.0",
+        "endpoints": {
+            "auth": "/v1/auth",
+            "jobs": "/v1/jobs",
+            "applications": "/v1/applications",
+            "profile": "/v1/profile",
+            "candidate": "/v1/candidate",
+            "scheduling": "/v1/scheduling",
+            "assessment": "/v1/assessment",
+            "candidate_dashboard": "/v1/candidate/dashboard",
+            "hr_dashboard": "/v1/hr/dashboard",
+            "hr_actions": "/v1/hr/actions",
+            "proctoring": "/v1/proctoring",
+            "resume": "/v1/resume",
+            "interview": "/interview"
+        }
+    }
     return {
         "status": "AI Recruitment System Running",
         "version": "2.0.0",
