@@ -6,12 +6,20 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Plus, X } from "lucide-react";
-import { Experience } from "@/app/candidate/(dashboard)/profile/page";
+
+type ExperienceFormItem = {
+  id: string;
+  jobTitle: string;
+  company: string;
+  startDate: string;
+  endDate: string;
+  description: string;
+};
 
 interface WorkExperienceCardProps {
   isEditing: boolean;
-  experiences: Experience[];
-  setExperiences: React.Dispatch<React.SetStateAction<Experience[]>>;
+  experiences: ExperienceFormItem[];
+  setExperiences: React.Dispatch<React.SetStateAction<ExperienceFormItem[]>>;
 }
 
 export default function WorkExperienceCard({
@@ -33,7 +41,7 @@ export default function WorkExperienceCard({
     ]);
   };
 
-  const updateExperience = (id: string, field: keyof Experience, value: string) => {
+  const updateExperience = (id: string, field: keyof ExperienceFormItem, value: string) => {
     setExperiences((prev) =>
       prev.map((exp) => (exp.id === id ? { ...exp, [field]: value } : exp))
     );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -100,7 +100,7 @@ const normalizeQuestions = (
   return [...normalizedMcq, ...normalizedCoding];
 };
 
-export default function AssessmentPage() {
+function AssessmentContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const applicationIdParam = searchParams.get("applicationId");
@@ -796,5 +796,19 @@ export default function AssessmentPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function AssessmentPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-[#B8915C]" />
+        </div>
+      }
+    >
+      <AssessmentContent />
+    </Suspense>
   );
 }

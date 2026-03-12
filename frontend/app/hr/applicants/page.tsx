@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -70,7 +70,7 @@ type ApplicantWithJob = HRApplication & {
   jobTitle: string;
 };
 
-export default function ApplicantsPage() {
+function ApplicantsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const initialJobFilter = searchParams.get("job") ?? "all";
@@ -633,5 +633,19 @@ export default function ApplicantsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function ApplicantsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[40vh] items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-[#B8915C]" />
+        </div>
+      }
+    >
+      <ApplicantsContent />
+    </Suspense>
   );
 }
