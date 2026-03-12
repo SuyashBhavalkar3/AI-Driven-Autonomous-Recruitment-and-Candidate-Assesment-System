@@ -140,6 +140,8 @@ export interface HRApplication {
   job_id: number;
   candidate_id: number;
   user_id: number;
+  candidate_name?: string | null;
+  candidate_email?: string | null;
   status: string;
   resume_match_score: number | null;
   resume_analysis?: Record<string, unknown> | null;

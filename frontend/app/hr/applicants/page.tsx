@@ -57,6 +57,13 @@ const scoreForApplicant = (application: HRApplication | HRApplicationDetail) =>
   application.resume_match_score ??
   0;
 
+const getApplicantTitle = (application: HRApplication | HRApplicationDetail) =>
+  application.candidate_name?.trim() ||
+  (application.candidate_email ? application.candidate_email : `Candidate #${application.user_id}`);
+
+const getApplicantSubtitle = (application: HRApplication | HRApplicationDetail) =>
+  application.candidate_email?.trim() || `Candidate ID #${application.candidate_id}`;
+
 type ApplicantWithJob = HRApplication & {
   jobTitle: string;
 };
@@ -138,6 +145,8 @@ export default function ApplicantsPage() {
         const matchesSearch =
           search.length === 0 ||
           application.jobTitle.toLowerCase().includes(search) ||
+          (application.candidate_name || "").toLowerCase().includes(search) ||
+          (application.candidate_email || "").toLowerCase().includes(search) ||
           String(application.candidate_id).includes(search) ||
           String(application.id).includes(search);
 
@@ -352,14 +361,17 @@ export default function ApplicantsPage() {
                     <div className="flex-1">
                       <div className="mb-2 flex items-center gap-3">
                         <h2 className="text-lg font-semibold text-[#2D2A24] dark:text-white">
-                          Candidate #{application.candidate_id}
+                          {getApplicantTitle(application)}
                         </h2>
                         <Badge className={statusConfig[application.status] ?? statusConfig.pending}>
                           {labelForStatus(application.status)}
                         </Badge>
                       </div>
 
-                      <p className="mb-3 text-[#5A534A] dark:text-slate-400">
+                      <p className="text-sm text-[#5A534A] dark:text-slate-400">
+                        {getApplicantSubtitle(application)}
+                      </p>
+                      <p className="mb-3 mt-1 text-[#5A534A] dark:text-slate-400">
                         {application.jobTitle}
                       </p>
 
@@ -441,7 +453,9 @@ export default function ApplicantsPage() {
             <DialogTitle className="text-2xl font-semibold text-[#2D2A24] dark:text-white">
               {detailsLoading
                 ? "Loading applicant details..."
-                : `Candidate #${selectedApplicant?.candidate_id}`}
+                : selectedApplicant
+                  ? getApplicantTitle(selectedApplicant)
+                  : "Candidate"}
             </DialogTitle>
           </DialogHeader>
 

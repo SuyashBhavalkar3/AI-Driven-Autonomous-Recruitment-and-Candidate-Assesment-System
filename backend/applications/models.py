@@ -46,3 +46,11 @@ class Application(Base):
     user = relationship("User", backref="applications")
     schedules = relationship("Schedule", back_populates="application", cascade="all, delete")
     assessments = relationship("Assessment", back_populates="application", cascade="all, delete")
+
+    @property
+    def candidate_name(self):
+        return self.user.name if self.user else None
+
+    @property
+    def candidate_email(self):
+        return self.user.email if self.user else None

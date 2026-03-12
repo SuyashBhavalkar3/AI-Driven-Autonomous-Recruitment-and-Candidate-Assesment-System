@@ -15,6 +15,8 @@ class ApplicationResponse(BaseModel):
     job_id: int
     candidate_id: int
     user_id: int
+    candidate_name: Optional[str] = None
+    candidate_email: Optional[str] = None
     status: ApplicationStatus
     resume_match_score: Optional[float]
     resume_analysis: Optional[Dict[str, Any]]
