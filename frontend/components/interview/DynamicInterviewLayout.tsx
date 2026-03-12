@@ -18,6 +18,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import DisqualificationScreen from "./DisqualificationScreen";
 import CompletionScreen from "./CompletionScreen";
+import BackToApplicationsButton from "@/components/navigation/BackToApplicationsButton";
 
 interface DynamicInterviewLayoutProps {
   applicationId?: string;
@@ -430,6 +431,7 @@ export default function DynamicInterviewLayout({
               >
                 Start AI Interview
               </button>
+              <BackToApplicationsButton className="w-full" />
             </div>
           </CardContent>
         </Card>

@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { AlertTriangle } from "lucide-react";
+import BackToApplicationsButton from "@/components/navigation/BackToApplicationsButton";
 
 interface DisqualificationScreenProps {
   reason: string;
@@ -19,9 +19,7 @@ export default function DisqualificationScreen({ reason }: DisqualificationScree
           <p className="text-sm text-slate-500 mb-6">
             If you believe this is an error, please contact support.
           </p>
-          <Button className="w-full" variant="destructive">
-            Return to Dashboard
-          </Button>
+          <BackToApplicationsButton className="w-full" variant="default" />
         </CardContent>
       </Card>
     </div>

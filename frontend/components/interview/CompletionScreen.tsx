@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { CheckCircle2 } from "lucide-react";
+import BackToApplicationsButton from "@/components/navigation/BackToApplicationsButton";
 
 export default function CompletionScreen() {
   return (
@@ -22,7 +22,7 @@ export default function CompletionScreen() {
               <li>✓ Decision notification via email</li>
             </ul>
           </div>
-          <Button className="w-full">Back to Applications</Button>
+          <BackToApplicationsButton className="w-full" variant="default" />
         </CardContent>
       </Card>
     </div>
