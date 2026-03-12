@@ -9,6 +9,7 @@ import {
   Briefcase,
   HelpCircle,
   Home,
+  Lightbulb,
   LogOut,
   Menu,
   Settings,
@@ -34,6 +35,7 @@ const navItems = [
   { name: "Dashboard", href: "/hr", icon: Home },
   { name: "Jobs", href: "/hr/jobs", icon: Briefcase },
   { name: "Applicants", href: "/hr/applicants", icon: Users },
+  { name: "Recruitment Strategy", href: "/hr/recruitment-strategy", icon: Lightbulb },
   { name: "Questions", href: "/hr/questions", icon: HelpCircle },
   { name: "Profile", href: "/hr/profile", icon: Settings },
 ];

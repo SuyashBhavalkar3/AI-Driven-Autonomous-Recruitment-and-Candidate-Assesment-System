@@ -299,6 +299,39 @@ export interface CandidateSchedule {
   rescheduled_count: number;
 }
 
+export interface RecruitmentStrategyRequest {
+  role_to_hire_for: string;
+  number_of_candidates_to_hire: number;
+  hiring_timeline_days: number;
+  company_category: "startup" | "mid-size" | "enterprise";
+}
+
+export interface RecruitmentStrategyResponse {
+  id: number;
+  role_to_hire_for: string;
+  number_of_candidates_to_hire: number;
+  hiring_timeline_days: number;
+  market_competition: string;
+  company_category: string;
+  company_offering: string;
+  competitor_offerings: string;
+  executive_summary: string;
+  hiring_funnel_strategy: {
+    applications: number;
+    resume_screening: number;
+    assessment: number;
+    interview: number;
+    final_hires: number;
+  };
+  time_optimization_plan: string[];
+  cost_optimization_suggestions: string[];
+  competitive_hiring_advice: string[];
+  sourcing_strategy: string[];
+  risk_warnings: string[];
+  raw_strategy_json: Record<string, unknown>;
+  created_at: string;
+}
+
 export async function registerUser(data: RegisterData): Promise<UserData> {
   const response = await fetch(`${API_BASE_URL}/v1/auth/register`, {
     method: 'POST',
@@ -573,6 +606,21 @@ export const hrAPI = {
       throw new Error(error.detail || 'Failed to download candidate report');
     }
     return res.blob();
+  },
+
+  generateRecruitmentStrategy: async (
+    payload: RecruitmentStrategyRequest
+  ): Promise<RecruitmentStrategyResponse> => {
+    const res = await fetch(`${API_BASE_URL}/v1/recruitment-strategy/generate`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error.detail || 'Failed to generate recruitment strategy');
+    }
+    return res.json();
   },
 };
 
