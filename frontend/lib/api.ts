@@ -70,6 +70,54 @@ export interface HRPendingActions {
   interview_completed: HRPendingActionItem[];
 }
 
+export interface CandidateReport {
+  id: number;
+  application_id: number;
+  report_type: string;
+  status: string;
+  pdf_path?: string | null;
+  pdf_url?: string | null;
+  llm_summary_json?: Record<string, unknown> | null;
+  chart_metadata_json?: Record<string, unknown> | null;
+  generated_at?: string | null;
+  error_message?: string | null;
+  created_at: string;
+  subject?: {
+    candidate_name: string;
+    candidate_id?: number | null;
+    job_title: string;
+    job_id?: number | null;
+    application_status?: string | null;
+  } | null;
+  assessment?: {
+    score: number;
+    accuracy_percent: number;
+    duration_minutes: number;
+    violation_count: number;
+    violations: Array<Record<string, unknown>>;
+    section_scores: Record<string, number>;
+    time_spent_by_section: Record<string, number>;
+  } | null;
+  interview?: {
+    score: number;
+    duration_minutes: number;
+    status: string;
+    violation_count: number;
+    violations: Array<Record<string, unknown>>;
+    response_count: number;
+    skill_ratings: Record<string, number>;
+    topic_coverage: Record<string, number>;
+    summary: string;
+  } | null;
+  strengths?: string[];
+  weaknesses?: string[];
+  behavioral_observations?: string[];
+  final_recommendation?: string | null;
+  candidate_summary?: string | null;
+  interview_summary?: string | null;
+  chart_images?: Record<string, string> | null;
+}
+
 export interface HRJob {
   id: number;
   title: string;
@@ -487,6 +535,42 @@ export const hrAPI = {
     });
     if (!res.ok) throw new Error('Failed to update profile');
     return res.json();
+  },
+
+  getCandidateReport: async (applicationId: number): Promise<CandidateReport> => {
+    const res = await fetch(`${API_BASE_URL}/v1/reports/application/${applicationId}`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error.detail || 'Failed to fetch candidate report');
+    }
+    return res.json();
+  },
+
+  generateCandidateReport: async (
+    applicationId: number
+  ): Promise<{ message: string; application_id: number; status: string }> => {
+    const res = await fetch(`${API_BASE_URL}/v1/reports/application/${applicationId}/generate`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error.detail || 'Failed to generate candidate report');
+    }
+    return res.json();
+  },
+
+  downloadCandidateReport: async (reportId: number): Promise<Blob> => {
+    const res = await fetch(`${API_BASE_URL}/v1/reports/${reportId}/download`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error.detail || 'Failed to download candidate report');
+    }
+    return res.blob();
   },
 };
 

@@ -1,7 +1,12 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+import asyncio
 import json
 import base64
 import logging
+from datetime import datetime
+
+from applications.models import Application, ApplicationStatus
+from authentication.database import SessionLocal
 from .services.interview_session import SessionManager
 from .services.code_executor import execute_code
 from .services.proctoring import log_violation
@@ -13,10 +18,46 @@ from .services.interview_script_generator import (
     evaluate_solution
 )
 from .services.adaptive_interview_bot import adaptive_bot
+from reports.service import generate_candidate_report_background
 
 router = APIRouter()
 session_manager = SessionManager()
 logger = logging.getLogger(__name__)
+
+
+def finalize_interview(application_id: int | None, session_id: str, status: str, reason: str = "completed"):
+    if not application_id:
+        return
+
+    db = SessionLocal()
+    try:
+        application = db.query(Application).filter(Application.id == application_id).first()
+        if not application:
+            return
+
+        session = session_manager.get_session(session_id) or {}
+        transcript = session.get("transcript", [])
+        violations = session.get("violations", [])
+        ended_at = datetime.utcnow()
+
+        feedback = dict(application.interview_feedback or {})
+        feedback["ai_interview_status"] = status
+        feedback["termination_reason"] = reason
+        feedback["completed_at"] = ended_at.isoformat()
+        feedback["duration_minutes"] = feedback.get("duration_minutes", 0)
+        feedback["violation_count"] = len(violations)
+        feedback["violations"] = violations
+        feedback["response_count"] = len([item for item in transcript if item.get("speaker") == "candidate"])
+
+        application.interview_feedback = feedback
+        application.interview_transcript = transcript
+        application.status = ApplicationStatus.INTERVIEW_COMPLETED
+
+        db.commit()
+    finally:
+        db.close()
+
+    asyncio.create_task(generate_candidate_report_background(application_id))
 
 async def safe_send_json(websocket: WebSocket, data: dict):
     """Safely send JSON data through WebSocket with error handling"""
@@ -45,7 +86,13 @@ async def get_interview_script(session_id: str):
     }
 
 @router.websocket("/ws/interview/{session_id}")
-async def interview_websocket(websocket: WebSocket, session_id: str, position: str = "Engineer", company: str = "Tech Company"):
+async def interview_websocket(
+    websocket: WebSocket,
+    session_id: str,
+    position: str = "Engineer",
+    company: str = "Tech Company",
+    applicationId: int | None = None,
+):
     await websocket.accept()
     logger.info(f"WebSocket accepted for session: {session_id}")
     
@@ -129,6 +176,7 @@ async def interview_websocket(websocket: WebSocket, session_id: str, position: s
                                 "text": bot_message,
                                 "reason": bot_response.get("reason", "candidate_declined")
                             })
+                            finalize_interview(applicationId, session_id, "completed", bot_response.get("reason", "candidate_declined"))
                             session_manager.end_session(session_id)
                             await websocket.close()
                             break
@@ -221,6 +269,7 @@ async def interview_websocket(websocket: WebSocket, session_id: str, position: s
                                 "type": "interview_complete",
                                 "message": "Interview completed! Your responses will be reviewed by our AI system."
                             })
+                            finalize_interview(applicationId, session_id, "completed", "normal_completion")
                             session_manager.end_session(session_id)
                             try:
                                 await websocket.close()

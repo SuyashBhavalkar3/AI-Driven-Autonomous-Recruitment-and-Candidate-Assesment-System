@@ -131,7 +131,9 @@ export default function DynamicInterviewLayout({
     const sessionId = `app_${applicationId}_${Date.now()}`;
 
     try {
-      const wsUrl = `${BACKEND_WS}/ws/interview/${sessionId}?position=${encodeURIComponent(
+      const wsUrl = `${BACKEND_WS}/ws/interview/${sessionId}?applicationId=${encodeURIComponent(
+        applicationId
+      )}&position=${encodeURIComponent(
         position
       )}&company=${encodeURIComponent(company)}`;
       wsRef.current = new WebSocket(wsUrl);

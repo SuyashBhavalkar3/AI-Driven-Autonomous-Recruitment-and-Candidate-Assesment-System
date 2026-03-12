@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List
@@ -8,6 +8,7 @@ from authentication.models import User
 from applications.models import Application, ApplicationStatus
 from middleware.rate_limiter import rate_limiter
 from datetime import datetime
+from reports.service import generate_candidate_report_safe
 
 router = APIRouter(prefix="/v1/proctoring", tags=["Proctoring"], dependencies=[Depends(rate_limiter)])
 
@@ -72,6 +73,7 @@ def report_violation(
 @router.post("/terminate-session")
 def terminate_session(
     data: TerminateSessionRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -100,6 +102,8 @@ def terminate_session(
         app.status = ApplicationStatus.ASSESSMENT_COMPLETED
 
     db.commit()
+    if data.stage == "interview":
+        background_tasks.add_task(generate_candidate_report_safe, data.application_id)
     return {"message": "Session terminated", "stage": data.stage, "status": data.status}
 
 @router.get("/violations/{application_id}")

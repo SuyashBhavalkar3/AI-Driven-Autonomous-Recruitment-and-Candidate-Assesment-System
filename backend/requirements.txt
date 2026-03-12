@@ -19,3 +19,7 @@ python-dotenv
 cloudinary 
 pdfminer.six
 python-docx
+weasyprint
+jinja2
+matplotlib
+pillow

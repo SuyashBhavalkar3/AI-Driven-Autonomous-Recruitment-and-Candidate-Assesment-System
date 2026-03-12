@@ -25,6 +25,7 @@ def init_db():
     from applications import models as app_models
     from assessment import models as assessment_models
     from notifications import models as notif_models
+    from reports import models as report_models
     Base.metadata.create_all(bind=engine)
 
 

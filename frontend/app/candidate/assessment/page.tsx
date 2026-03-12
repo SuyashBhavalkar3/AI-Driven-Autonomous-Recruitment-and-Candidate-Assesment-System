@@ -773,7 +773,7 @@ export default function AssessmentPage() {
             <Button onClick={() => setCurrentQuestion(currentQuestion + 1)}>Next</Button>
           ) : (
             <Button
-              onClick={handleSubmit}
+              onClick={() => handleSubmit()}
               disabled={submitting}
               className="bg-green-600 hover:bg-green-700"
             >

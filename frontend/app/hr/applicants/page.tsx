@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,9 +15,16 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { AlertCircle, CheckCircle, FileText, Search, Sparkles, Target } from "lucide-react";
+import { AlertCircle, CheckCircle, Download, Eye, FileText, Loader2, Search, Sparkles, Target } from "lucide-react";
 
-import { getCurrentUser, hrAPI, HRApplication, HRApplicationDetail, HRJob } from "@/lib/api";
+import {
+  CandidateReport,
+  getCurrentUser,
+  hrAPI,
+  HRApplication,
+  HRApplicationDetail,
+  HRJob,
+} from "@/lib/api";
 import { getAuthToken } from "@/lib/auth";
 
 const statusConfig: Record<string, string> = {
@@ -56,6 +63,7 @@ type ApplicantWithJob = HRApplication & {
 
 export default function ApplicantsPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const initialJobFilter = searchParams.get("job") ?? "all";
 
   const [jobs, setJobs] = useState<HRJob[]>([]);
@@ -67,7 +75,10 @@ export default function ApplicantsPage() {
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(true);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<"accepted" | "rejected" | null>(null);
+  const [reportActionLoading, setReportActionLoading] = useState<"generate" | "download" | null>(null);
+  const [selectedReport, setSelectedReport] = useState<CandidateReport | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -142,9 +153,20 @@ export default function ApplicantsPage() {
 
   const openDetails = async (applicationId: number) => {
     try {
+      setError(null);
       setDetailsLoading(true);
-      const detail = await hrAPI.getApplicationDetail(applicationId);
+      setReportLoading(true);
+      const [detail, report] = await Promise.all([
+        hrAPI.getApplicationDetail(applicationId),
+        hrAPI.getCandidateReport(applicationId).catch((reportError) => {
+          if (reportError instanceof Error && reportError.message === "Report not found") {
+            return null;
+          }
+          throw reportError;
+        }),
+      ]);
       setSelectedApplicant(detail);
+      setSelectedReport(report);
       setNotes(detail.hr_notes || "");
     } catch (detailError) {
       setError(
@@ -154,6 +176,59 @@ export default function ApplicantsPage() {
       );
     } finally {
       setDetailsLoading(false);
+      setReportLoading(false);
+    }
+  };
+
+  const handleGenerateReport = async () => {
+    if (!selectedApplicant) {
+      return;
+    }
+
+    try {
+      setError(null);
+      setReportActionLoading("generate");
+      await hrAPI.generateCandidateReport(selectedApplicant.id);
+      const refreshed = await hrAPI.getCandidateReport(selectedApplicant.id);
+      setSelectedReport(refreshed);
+    } catch (reportError) {
+      setError(
+        reportError instanceof Error ? reportError.message : "Failed to generate report."
+      );
+    } finally {
+      setReportActionLoading(null);
+    }
+  };
+
+  const handleViewReport = async () => {
+    if (!selectedReport) {
+      return;
+    }
+    router.push(`/hr/reports/${selectedReport.application_id}`);
+  };
+
+  const handleDownloadReport = async () => {
+    if (!selectedReport) {
+      return;
+    }
+
+    try {
+      setReportActionLoading("download");
+      const blob = await hrAPI.downloadCandidateReport(selectedReport.id);
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = `candidate_report_${selectedReport.application_id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+    } catch (downloadError) {
+      setError(
+        downloadError instanceof Error ? downloadError.message : "Failed to download report."
+      );
+    } finally {
+      setReportActionLoading(null);
     }
   };
 
@@ -354,7 +429,13 @@ export default function ApplicantsPage() {
         </Card>
       )}
 
-      <Dialog open={!!selectedApplicant || detailsLoading} onOpenChange={() => setSelectedApplicant(null)}>
+      <Dialog
+        open={!!selectedApplicant || detailsLoading}
+        onOpenChange={() => {
+          setSelectedApplicant(null);
+          setSelectedReport(null);
+        }}
+      >
         <DialogContent className="max-w-2xl border-none bg-white/95 shadow-2xl backdrop-blur-xl dark:bg-slate-900/95">
           <DialogHeader>
             <DialogTitle className="text-2xl font-semibold text-[#2D2A24] dark:text-white">
@@ -408,6 +489,83 @@ export default function ApplicantsPage() {
                     placeholder="Add notes for this application..."
                     className="min-h-28 border-[#D6CDC2] bg-white dark:bg-slate-800"
                   />
+                </div>
+
+                <div className="rounded-lg bg-[#F1E9E0] p-4 dark:bg-slate-800/50">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-[#2D2A24] dark:text-white">
+                        Evaluation Report
+                      </p>
+                      {reportLoading ? (
+                        <p className="mt-1 text-sm text-[#5A534A] dark:text-slate-400">
+                          Loading report status...
+                        </p>
+                      ) : selectedReport ? (
+                        <>
+                          <p className="mt-1 text-sm text-[#5A534A] dark:text-slate-400">
+                            Status: {selectedReport.status}
+                          </p>
+                          {selectedReport.generated_at && (
+                            <p className="mt-1 text-xs text-[#A69A8C]">
+                              Generated {new Date(selectedReport.generated_at).toLocaleString()}
+                            </p>
+                          )}
+                          {selectedReport.error_message && (
+                            <p className="mt-2 text-sm text-red-600 dark:text-red-400">
+                              {selectedReport.error_message}
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        <p className="mt-1 text-sm text-[#5A534A] dark:text-slate-400">
+                          No report generated yet for this application.
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {selectedReport?.status === "completed" ? (
+                        <>
+                          <Button
+                            variant="outline"
+                            onClick={handleViewReport}
+                            disabled={reportActionLoading !== null}
+                            className="border-[#D6CDC2] text-[#4A443C] hover:bg-[#F1E9E0]"
+                          >
+                            {reportActionLoading === "download" ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <Eye className="mr-2 h-4 w-4" />
+                            )}
+                            View Report
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={handleDownloadReport}
+                            disabled={reportActionLoading !== null}
+                            className="border-[#D6CDC2] text-[#4A443C] hover:bg-[#F1E9E0]"
+                          >
+                            <Download className="mr-2 h-4 w-4" />
+                            Download Report
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          onClick={handleGenerateReport}
+                          disabled={reportActionLoading !== null}
+                          className="bg-[#B8915C] hover:bg-[#9F7A4F]"
+                        >
+                          {reportActionLoading === "generate" ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Download className="mr-2 h-4 w-4" />
+                          )}
+                          Generate Report
+                        </Button>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex gap-3">

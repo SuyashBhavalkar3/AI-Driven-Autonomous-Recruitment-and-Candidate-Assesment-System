@@ -17,6 +17,7 @@ from hr_dashboard.routes import router as hr_dashboard_router
 from hr_actions.routes import router as hr_actions_router
 from proctoring.routes import router as proctoring_router
 from ATS_score.route import router as ats_router
+from reports.routes import router as reports_router
 
 Base.metadata.create_all(bind=engine)
 
@@ -72,6 +73,7 @@ app.include_router(ai_router)
 app.include_router(code_router)
 app.include_router(tts_router)
 app.include_router(ats_router)
+app.include_router(reports_router)
 
 @app.on_event("startup")
 def on_startup():
