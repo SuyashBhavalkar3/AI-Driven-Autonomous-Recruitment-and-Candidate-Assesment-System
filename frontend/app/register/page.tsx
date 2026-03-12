@@ -3,772 +3,395 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import Link from "next/link";
-import { useState, useCallback } from "react";
-import { useForm, useFieldArray, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { 
-  ArrowRight, 
-  Mail, 
-  Lock, 
-  User, 
-  Calendar, 
-  Building, 
-  Briefcase,
-  Upload,
-  X,
-  CheckCircle,
-  FileText,
-  Loader2,
-  ChevronRight
-} from "lucide-react";
-
-// Define validation schema with Zod
-const experienceSchema = z.object({
-  jobTitle: z.string().min(1, "Job title is required"),
-  company: z.string().min(1, "Company name is required"),
-  startDate: z.string().min(1, "Start date is required"),
-  endDate: z.string().optional(),
-  description: z.string().optional(),
-});
-
-const formSchema = z
-  .object({
-    fullName: z.string().min(2, "Full name must be at least 2 characters"),
-    email: z.string().email("Invalid email address"),
-    password: z.string().min(8, "Password must be at least 8 characters"),
-    dateOfBirth: z.string().min(1, "Date of birth is required"),
-    role: z.enum(["candidate", "hr"]),
-    company: z.string().optional(),
-    skills: z.string().optional(),
-    experiences: z.array(experienceSchema).optional(),
-  })
-  .refine(
-    (data) => {
-      if (data.role === "hr" && !data.company) {
-        return false;
-      }
-      return true;
-    },
-    {
-      message: "Company name is required for HR",
-      path: ["company"],
-    }
-  );
-
-type FormData = z.infer<typeof formSchema>;
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Mail, Lock, ArrowRight, Loader2, AlertCircle, User, Building } from "lucide-react";
+import { registerUser, loginUser } from "@/lib/api";
+import { getCurrentUser } from "@/lib/api";
+import { setAuthToken, setUserRole, setUserData } from "@/lib/auth";
 
 export default function RegisterPage() {
+  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(false);
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isEmployer, setIsEmployer] = useState(false);
+  const [company, setCompany] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [currentStep, setCurrentStep] = useState(1);
-  const totalSteps = 4;
-  
-  // Resume upload state
-  const [resumeFile, setResumeFile] = useState<File | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const {
-    register,
-    control,
-    handleSubmit,
-    watch,
-    formState: { errors, isValid },
-  } = useForm<FormData>({
-    resolver: zodResolver(formSchema),
-    mode: "onChange",
-    defaultValues: {
-      fullName: "",
-      email: "",
-      password: "",
-      dateOfBirth: "",
-      role: "candidate",
-      company: "",
-      skills: "",
-      experiences: [],
-    },
-  });
-
-  const { fields, append, remove } = useFieldArray({
-    control,
-    name: "experiences",
-  });
-
-  const selectedRole = watch("role");
-  const formValues = watch();
-
-  // Check if current step is valid
-  const isStepValid = () => {
-    switch(currentStep) {
-      case 1:
-        return formValues.fullName && formValues.email && formValues.password && formValues.dateOfBirth;
-      case 2:
-        return true; // Role is always selected
-      case 3:
-        return true; // Resume is optional
-      case 4:
-        return true; // Experiences are optional
-      default:
-        return false;
-    }
-  };
-
-  const nextStep = () => {
-    if (currentStep < totalSteps && isStepValid()) {
-      // Skip steps 3 and 4 for HR users
-      if (selectedRole === "hr" && currentStep === 2) {
-        // Submit form directly for HR
-        handleSubmit(onSubmit)();
-      } else {
-        setCurrentStep(currentStep + 1);
-      }
-    }
-  };
-
-  const prevStep = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
-    }
-  };
-
-  // Drag and drop handlers
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-  }, []);
+    setError(null);
 
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-  }, []);
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      handleFileUpload(files[0]);
-    }
-  }, []);
-
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      handleFileUpload(files[0]);
-    }
-  }, []);
-
-  const handleFileUpload = (file: File) => {
-    // Validate file type
-    const validTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-    if (!validTypes.includes(file.type)) {
-      setUploadError('Please upload a PDF or Word document');
+    if (!fullName || !email || !password || !confirmPassword) {
+      setError("Please fill in all fields");
       return;
     }
 
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      setUploadError('File size must be less than 5MB');
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
       return;
     }
 
-    setUploadError(null);
-    setIsUploading(true);
-    setResumeFile(file);
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters");
+      return;
+    }
 
-    // Simulate upload progress
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 10;
-      setUploadProgress(progress);
-      if (progress >= 100) {
-        clearInterval(interval);
-        setIsUploading(false);
-      }
-    }, 200);
-  };
+    if (isEmployer && !company) {
+      setError("Company name is required for employers");
+      return;
+    }
 
-  const removeFile = () => {
-    setResumeFile(null);
-    setUploadProgress(0);
-    setUploadError(null);
-  };
+    setIsLoading(true);
 
-  const onSubmit = (data: FormData) => {
-    console.log("Form data:", { ...data, resume: resumeFile });
-    // Redirect based on role
-    if (data.role === "hr") {
-      window.location.href = "/hr";
-    } else {
-      window.location.href = "/candidate";
+    try {
+      const userData = await registerUser({
+        fullName,
+        email,
+        password,
+        is_employer: isEmployer,
+        company: company || undefined
+      });
+
+      // Auto-login after registration
+      const authResponse = await loginUser({ email, password });
+      const { access_token } = authResponse;
+
+      setAuthToken(access_token);
+
+      // Fetch user data
+      const currentUserData = await getCurrentUser(access_token);
+      const userRole = currentUserData.is_employer ? "hr" : "candidate";
+      
+      setUserRole(userRole);
+      setUserData(currentUserData);
+
+      router.push(userRole === "hr" ? "/hr" : "/candidate");
+    } catch (err: any) {
+      setError(err.message || "Registration failed. Please try again.");
+      setIsLoading(false);
     }
   };
 
-  // Floating orbs animation (same as login page)
-  const floatingOrb = (delay: number) => ({
-    animate: {
-      y: [0, -20, 0],
-      x: [0, 10, 0],
-      transition: {
-        duration: 8,
-        repeat: Infinity,
-        ease: "easeInOut",
-        delay,
-      },
+  // Animation variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: { staggerChildren: 0.1, delayChildren: 0.2 },
     },
-  });
+  };
+  const itemVariants = {
+    hidden: { y: 20, opacity: 0 },
+    visible: {
+      y: 0,
+      opacity: 1,
+      transition: { type: "spring" as const, stiffness: 300, damping: 24 },
+    },
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Floating orbs - same as login page */}
+    <div className="relative min-h-screen flex items-center justify-center p-4 overflow-hidden bg-[#F9F6F0]">
+      {/* Artistic background */}
+      <div className="absolute inset-0 opacity-30">
+        <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-[#E6D7C3] rounded-full mix-blend-multiply filter blur-3xl animate-blob" />
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#D9C5B3] rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-2000" />
+        <div className="absolute bottom-0 left-20 w-[500px] h-[500px] bg-[#C7B5A0] rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-4000" />
+      </div>
+      <div className="absolute inset-0 bg-[url('/noise.png')] opacity-5 pointer-events-none" />
+
+      {/* Main card */}
       <motion.div
-        animate={{
-          y: [0, -20, 0],
-          x: [0, 10, 0],
-        }}
-        transition={{
-          duration: 8,
-          repeat: Infinity,
-          ease: "easeInOut"
-        }}
-        className="absolute top-20 left-10 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -z-10"
-      />
-      <motion.div
-        animate={{
-          y: [0, 20, 0],
-          x: [0, -10, 0],
-        }}
-        transition={{
-          duration: 7,
-          repeat: Infinity,
-          ease: "easeInOut",
-          delay: 1
-        }}
-        className="absolute bottom-20 right-10 w-80 h-80 bg-purple-400/10 rounded-full blur-3xl -z-10"
-      />
-
-      {/* Main container - split layout like modern SaaS sites [citation:9] */}
-      <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 bg-white dark:bg-slate-900 rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
-        
-        {/* Left side - Brand/Value proposition */}
-        <div className="relative hidden lg:block bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 p-8 overflow-hidden">
-          <div className="absolute inset-0 bg-grid-white/[0.2] bg-[size:20px_20px]" />
-          
-          <div className="relative h-full flex flex-col justify-between">
-            <div>
-              <h2 className="text-2xl font-bold text-white mb-2">HireFlow</h2>
-              <p className="text-white/80 text-sm">AI-powered recruitment</p>
-            </div>
-
-            <div className="space-y-6">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-              >
-                <h3 className="text-3xl font-bold text-white mb-4">
-                  Join the future of hiring
-                </h3>
-                <p className="text-white/90 text-lg">
-                  Create your free account and experience how AI transforms talent acquisition.
-                </p>
-              </motion.div>
-
-              {/* Progress steps - visual indicator [citation:5] */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                    currentStep >= 1 ? 'bg-white text-indigo-600' : 'bg-white/20 text-white'
-                  }`}>
-                    1
-                  </div>
-                  <div className="flex-1">
-                    <p className={`text-sm font-medium ${currentStep >= 1 ? 'text-white' : 'text-white/60'}`}>
-                      Account details
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                    currentStep >= 2 ? 'bg-white text-indigo-600' : 'bg-white/20 text-white'
-                  }`}>
-                    2
-                  </div>
-                  <div className="flex-1">
-                    <p className={`text-sm font-medium ${currentStep >= 2 ? 'text-white' : 'text-white/60'}`}>
-                      Role & company
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                    currentStep >= 3 ? 'bg-white text-indigo-600' : 'bg-white/20 text-white'
-                  }`}>
-                    3
-                  </div>
-                  <div className="flex-1">
-                    <p className={`text-sm font-medium ${currentStep >= 3 ? 'text-white' : 'text-white/60'}`}>
-                      Upload resume
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                    currentStep >= 4 ? 'bg-white text-indigo-600' : 'bg-white/20 text-white'
-                  }`}>
-                    4
-                  </div>
-                  <div className="flex-1">
-                    <p className={`text-sm font-medium ${currentStep >= 4 ? 'text-white' : 'text-white/60'}`}>
-                      Experience
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Testimonial - social proof [citation:5] */}
-              <div className="pt-6 border-t border-white/20">
-                <p className="text-white/80 text-sm italic">
-                  "HireFlow helped us reduce time-to-hire by 40% while finding better-qualified candidates."
-                </p>
-                <p className="text-white/60 text-xs mt-2">
-                  — Naav lihaa konacha
-                </p>
-              </div>
-            </div>
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+        className="relative w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 rounded-3xl overflow-hidden backdrop-blur-xl bg-white/40 border border-white/50 shadow-2xl"
+      >
+        {/* Left side – artistic branding */}
+        <div className="relative hidden lg:flex flex-col justify-center p-12 bg-gradient-to-br from-[#F1E9E0]/80 to-[#E5D9CF]/80 backdrop-blur-sm">
+          <div className="absolute inset-0 opacity-20">
+            <svg className="absolute top-8 left-8 w-48 h-48" viewBox="0 0 200 200" fill="none">
+              <path d="M50 100C50 70 70 50 100 50C130 50 150 70 150 100C150 130 130 150 100 150C70 150 50 130 50 100Z" fill="#B8915C" />
+              <circle cx="120" cy="80" r="40" fill="#C17C5A" />
+            </svg>
           </div>
+          <div className="relative z-10">
+            <motion.h1
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2, duration: 0.8 }}
+              className="font-serif text-4xl font-medium tracking-tight text-[#2D2A24] mb-3"
+            >
+              HireFlow
+            </motion.h1>
+            <motion.p
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3, duration: 0.8 }}
+              className="text-base text-[#4A443C] leading-relaxed max-w-sm"
+            >
+              Where talent meets opportunity —<br /> thoughtfully, intelligently.
+            </motion.p>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5, duration: 1 }}
+              className="mt-8 h-px w-12 bg-[#B8915C]/40"
+            />
+          </div>
+          <motion.div
+            initial={{ pathLength: 0 }}
+            animate={{ pathLength: 1 }}
+            transition={{ delay: 0.8, duration: 1.5, ease: "easeInOut" }}
+            className="absolute bottom-12 right-12 w-24 h-24 opacity-20"
+          >
+            <svg viewBox="0 0 100 100" fill="none" stroke="#2D2A24" strokeWidth="1">
+              <path d="M20 80 Q 40 20, 80 30" strokeLinecap="round" />
+            </svg>
+          </motion.div>
         </div>
 
-        {/* Right side - Multi-step form */}
-        <div className="p-6 lg:p-8 bg-white dark:bg-slate-900">
-          <div className="max-w-md mx-auto w-full">
+        {/* Right side – form */}
+        <div className="p-6 lg:p-8 backdrop-blur-xl bg-white/70">
+          <div className="max-w-sm mx-auto w-full">
             {/* Mobile logo */}
             <div className="lg:hidden mb-6">
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                HireFlow
-              </h1>
+              <h1 className="font-serif text-2xl font-medium text-[#2D2A24]">HireFlow</h1>
             </div>
 
-            {/* Header with step indicator */}
-            <div className="mb-6">
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
-                Step {currentStep} of {totalSteps}
-              </h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                {currentStep === 1 && "Create your account"}
-                {currentStep === 2 && "Tell us about your role"}
-                {currentStep === 3 && "Upload your resume (optional)"}
-                {currentStep === 4 && "Add your experience"}
-              </p>
-            </div>
+            {/* Header */}
+            <motion.div
+              variants={itemVariants}
+              initial="hidden"
+              animate="visible"
+              className="mb-6"
+            >
+              <h2 className="text-xl font-medium text-[#2D2A24] mb-1">Create account</h2>
+              <p className="text-sm text-[#5A534A]">Join our recruitment platform</p>
+            </motion.div>
 
-            <form onSubmit={handleSubmit(onSubmit)}>
-              <AnimatePresence mode="wait">
-                {/* Step 1: Account Details */}
-                {currentStep === 1 && (
-                  <motion.div
-                    key="step1"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.3 }}
-                    className="space-y-4"
-                  >
-                    <div className="space-y-2">
-                      <Label htmlFor="fullName">Full name</Label>
-                      <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                        <Input
-                          id="fullName"
-                          {...register("fullName")}
-                          placeholder="John Doe"
-                          className="pl-10 h-11 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl"
-                        />
-                      </div>
-                      {errors.fullName && (
-                        <p className="text-sm text-destructive">{errors.fullName.message}</p>
-                      )}
-                    </div>
+            {/* Error Alert */}
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-3 p-2 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 flex items-start gap-2"
+              >
+                <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-red-700 dark:text-red-300">{error}</p>
+              </motion.div>
+            )}
 
-                    <div className="space-y-2">
-                      <Label htmlFor="email">Work email</Label>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                        <Input
-                          id="email"
-                          type="email"
-                          {...register("email")}
-                          placeholder="name@company.com"
-                          className="pl-10 h-11 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl"
-                        />
-                      </div>
-                      {errors.email && (
-                        <p className="text-sm text-destructive">{errors.email.message}</p>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="password">Password</Label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                        <Input
-                          id="password"
-                          type={showPassword ? "text" : "password"}
-                          {...register("password")}
-                          placeholder="••••••••"
-                          className="pl-10 h-11 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl pr-10"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                        >
-                          {showPassword ? "Hide" : "Show"}
-                        </button>
-                      </div>
-                      {errors.password && (
-                        <p className="text-sm text-destructive">{errors.password.message}</p>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="dateOfBirth">Date of birth</Label>
-                      <div className="relative">
-                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                        <Input
-                          id="dateOfBirth"
-                          type="date"
-                          {...register("dateOfBirth")}
-                          className="pl-10 h-11 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl"
-                        />
-                      </div>
-                      {errors.dateOfBirth && (
-                        <p className="text-sm text-destructive">{errors.dateOfBirth.message}</p>
-                      )}
-                    </div>
-                  </motion.div>
-                )}
-
-                {/* Step 2: Role Selection */}
-                {currentStep === 2 && (
-                  <motion.div
-                    key="step2"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.3 }}
-                    className="space-y-4"
-                  >
-                    <div className="space-y-2">
-                      <Label>I am a</Label>
-                      <Controller
-                        control={control}
-                        name="role"
-                        render={({ field }) => (
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <SelectTrigger className="h-11 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-xl">
-                              <SelectValue placeholder="Select your role" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="candidate">Candidate</SelectItem>
-                              <SelectItem value="hr">HR / Recruiter</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        )}
-                      />
-                    </div>
-
-                    <AnimatePresence>
-                      {selectedRole === "hr" && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.3 }}
-                          className="space-y-2 overflow-hidden"
-                        >
-                          <Label htmlFor="company">Company name</Label>
-                          <div className="relative">
-                            <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                            <Input
-                              id="company"
-                              {...register("company")}
-                              placeholder="Acme Inc."
-                              className="pl-10 h-11 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl"
-                            />
-                          </div>
-                          {errors.company && (
-                            <p className="text-sm text-destructive">{errors.company.message}</p>
-                          )}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-
-                    {selectedRole === "candidate" && (
-                      <div className="space-y-2">
-                        <Label htmlFor="skills">Skills (comma separated)</Label>
-                        <div className="relative">
-                          <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                          <Input
-                            id="skills"
-                            {...register("skills")}
-                            placeholder="React, Node.js, TypeScript"
-                            className="pl-10 h-11 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </motion.div>
-                )}
-
-                {/* Step 3: Resume Upload - Only for Candidates */}
-                {currentStep === 3 && selectedRole === "candidate" && (
-                  <motion.div
-                    key="step3"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <div className="space-y-4">
-                      <div
-                        onDragEnter={handleDragEnter}
-                        onDragLeave={handleDragLeave}
-                        onDragOver={handleDragOver}
-                        onDrop={handleDrop}
-                        className={`relative border-2 border-dashed rounded-xl p-6 transition-all duration-200 ${
-                          isDragging
-                            ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/20'
-                            : resumeFile
-                            ? 'border-green-500 bg-green-50 dark:bg-green-950/20'
-                            : 'border-slate-200 dark:border-slate-700 hover:border-indigo-400'
-                        }`}
-                      >
-                        <input
-                          type="file"
-                          accept=".pdf,.doc,.docx"
-                          onChange={handleFileSelect}
-                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        />
-                        
-                        <div className="text-center">
-                          {!resumeFile ? (
-                            <>
-                              <Upload className="mx-auto h-8 w-8 text-slate-400 mb-2" />
-                              <p className="text-sm text-slate-600 dark:text-slate-400">
-                                Drag & drop your resume here, or click to browse
-                              </p>
-                              <p className="text-xs text-slate-500 mt-1">
-                                Supports PDF, DOC, DOCX (max 5MB)
-                              </p>
-                            </>
-                          ) : (
-                            <div className="space-y-2">
-                              {isUploading ? (
-                                <>
-                                  <FileText className="mx-auto h-8 w-8 text-indigo-500 animate-pulse" />
-                                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                    Uploading: {resumeFile.name}
-                                  </p>
-                                  <div className="w-full bg-slate-200 rounded-full h-1.5">
-                                    <div 
-                                      className="bg-indigo-600 h-1.5 rounded-full transition-all duration-200"
-                                      style={{ width: `${uploadProgress}%` }}
-                                    />
-                                  </div>
-                                </>
-                              ) : (
-                                <>
-                                  <CheckCircle className="mx-auto h-8 w-8 text-green-500" />
-                                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                    {resumeFile.name}
-                                  </p>
-                                  <p className="text-xs text-slate-500">
-                                    {(resumeFile.size / 1024).toFixed(1)} KB
-                                  </p>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={removeFile}
-                                    className="text-destructive hover:text-destructive/80"
-                                  >
-                                    <X className="h-4 w-4 mr-1" /> Remove
-                                  </Button>
-                                </>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {uploadError && (
-                        <p className="text-sm text-destructive text-center">{uploadError}</p>
-                      )}
-
-                      <p className="text-xs text-center text-slate-500">
-                        Your resume will be parsed by our AI to auto-fill your profile
-                      </p>
-                    </div>
-                  </motion.div>
-                )}
-
-                {/* Step 4: Experience - Only for Candidates */}
-                {currentStep === 4 && selectedRole === "candidate" && (
-                  <motion.div
-                    key="step4"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.3 }}
-                    className="space-y-4"
-                  >
-                    {fields.map((field, index) => (
-                      <motion.div
-                        key={field.id}
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        className="relative p-4 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50/50 dark:bg-slate-800/50"
-                      >
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="absolute top-2 right-2 text-destructive hover:bg-destructive/10"
-                          onClick={() => remove(index)}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-
-                        <div className="space-y-3">
-                          <Input
-                            {...register(`experiences.${index}.jobTitle` as const)}
-                            placeholder="Job title"
-                            className="bg-white dark:bg-slate-900"
-                          />
-                          <Input
-                            {...register(`experiences.${index}.company` as const)}
-                            placeholder="Company"
-                            className="bg-white dark:bg-slate-900"
-                          />
-                          <div className="grid grid-cols-2 gap-2">
-                            <Input
-                              type="date"
-                              {...register(`experiences.${index}.startDate` as const)}
-                              className="bg-white dark:bg-slate-900"
-                            />
-                            <Input
-                              type="date"
-                              {...register(`experiences.${index}.endDate` as const)}
-                              placeholder="End date"
-                              className="bg-white dark:bg-slate-900"
-                            />
-                          </div>
-                          <Textarea
-                            {...register(`experiences.${index}.description` as const)}
-                            placeholder="Description (optional)"
-                            rows={2}
-                            className="bg-white dark:bg-slate-900"
-                          />
-                        </div>
-                      </motion.div>
-                    ))}
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() =>
-                        append({
-                          jobTitle: "",
-                          company: "",
-                          startDate: "",
-                          endDate: "",
-                          description: "",
-                        })
-                      }
-                      className="w-full border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-indigo-700 dark:text-indigo-300"
-                    >
-                      + Add Experience
-                    </Button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Navigation buttons */}
-              <div className="mt-6 space-y-3">
-                <div className="flex gap-3">
-                  {currentStep > 1 && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={prevStep}
-                      className="flex-1 h-11 border-slate-200 dark:border-slate-700"
-                    >
-                      Back
-                    </Button>
-                  )}
-                  {currentStep < totalSteps && selectedRole === "candidate" ? (
-                    <Button
-                      type="button"
-                      onClick={nextStep}
-                      disabled={!isStepValid()}
-                      className="flex-1 h-11 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl shadow-lg shadow-indigo-600/25"
-                    >
-                      Continue <ChevronRight className="ml-2 h-4 w-4" />
-                    </Button>
-                  ) : currentStep === 2 && selectedRole === "hr" ? (
-                    <Button
-                      type="submit"
-                      className="flex-1 h-11 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl shadow-lg shadow-indigo-600/25"
-                    >
-                      Create Account <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                  ) : (
-                    <Button
-                      type="submit"
-                      className="w-full h-11 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl shadow-lg shadow-indigo-600/25"
-                    >
-                      Create Account <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                  )}
+            {/* Form */}
+            <motion.form
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+              onSubmit={handleSubmit}
+              className="space-y-3"
+            >
+              <motion.div variants={itemVariants}>
+                <Label htmlFor="fullName" className="text-xs font-medium text-[#4A443C] mb-1 block">
+                  Full name
+                </Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-3 w-3 text-[#A69A8C]" />
+                  <Input
+                    id="fullName"
+                    name="fullName"
+                    type="text"
+                    placeholder="Enter your full name"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className="pl-9 h-9 bg-white/60 backdrop-blur-sm border-[#D6CDC2] focus:border-[#B8915C] focus:ring-[#B8915C]/20 rounded-xl transition-all placeholder:text-[#A69A8C] text-sm"
+                    required
+                  />
                 </div>
+              </motion.div>
 
-                <p className="text-center text-sm text-slate-600 dark:text-slate-400">
-                  Already have an account?{" "}
-                  <Link href="/login" className="text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 font-medium">
-                    Sign in
+              <motion.div variants={itemVariants}>
+                <Label htmlFor="email" className="text-xs font-medium text-[#4A443C] mb-1 block">
+                  Work email
+                </Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-3 w-3 text-[#A69A8C]" />
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    placeholder="name@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="pl-9 h-9 bg-white/60 backdrop-blur-sm border-[#D6CDC2] focus:border-[#B8915C] focus:ring-[#B8915C]/20 rounded-xl transition-all placeholder:text-[#A69A8C] text-sm"
+                    required
+                  />
+                </div>
+              </motion.div>
+
+              <motion.div variants={itemVariants}>
+                <Label htmlFor="password" className="text-xs font-medium text-[#4A443C] mb-1 block">
+                  Password
+                </Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-3 w-3 text-[#A69A8C]" />
+                  <Input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="pl-9 pr-12 h-9 bg-white/60 backdrop-blur-sm border-[#D6CDC2] focus:border-[#B8915C] focus:ring-[#B8915C]/20 rounded-xl transition-all placeholder:text-[#A69A8C] text-sm"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-xs"
+                  >
+                    {showPassword ? "Hide" : "Show"}
+                  </button>
+                </div>
+              </motion.div>
+
+              <motion.div variants={itemVariants}>
+                <Label htmlFor="confirmPassword" className="text-xs font-medium text-[#4A443C] mb-1 block">
+                  Confirm password
+                </Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-3 w-3 text-[#A69A8C]" />
+                  <Input
+                    id="confirmPassword"
+                    name="confirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="pl-9 pr-12 h-9 bg-white/60 backdrop-blur-sm border-[#D6CDC2] focus:border-[#B8915C] focus:ring-[#B8915C]/20 rounded-xl transition-all placeholder:text-[#A69A8C] text-sm"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-xs"
+                  >
+                    {showConfirmPassword ? "Hide" : "Show"}
+                  </button>
+                </div>
+              </motion.div>
+
+              <motion.div variants={itemVariants}>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="isEmployer"
+                    checked={isEmployer}
+                    onChange={(e) => {
+                      setIsEmployer(e.target.checked);
+                      if (!e.target.checked) setCompany("");
+                    }}
+                    className="w-3 h-3 text-[#B8915C] bg-white/60 border-[#D6CDC2] rounded focus:ring-[#B8915C]/20 focus:ring-1"
+                  />
+                  <Label htmlFor="isEmployer" className="text-xs font-medium text-[#4A443C]">
+                    I'm an employer/recruiter
+                  </Label>
+                </div>
+              </motion.div>
+
+              {isEmployer && (
+                <motion.div
+                  variants={itemVariants}
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                >
+                  <Label htmlFor="company" className="text-xs font-medium text-[#4A443C] mb-1 block">
+                    Company name
+                  </Label>
+                  <div className="relative">
+                    <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-3 w-3 text-[#A69A8C]" />
+                    <Input
+                      id="company"
+                      name="company"
+                      type="text"
+                      placeholder="Enter your company name"
+                      value={company}
+                      onChange={(e) => setCompany(e.target.value)}
+                      className="pl-9 h-9 bg-white/60 backdrop-blur-sm border-[#D6CDC2] focus:border-[#B8915C] focus:ring-[#B8915C]/20 rounded-xl transition-all placeholder:text-[#A69A8C] text-sm"
+                      required
+                    />
+                  </div>
+                </motion.div>
+              )}
+
+              <motion.div variants={itemVariants}>
+                <Button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full h-9 bg-[#B8915C] hover:bg-[#9F7A4F] text-white font-medium rounded-xl shadow-lg shadow-[#B8915C]/20 hover:shadow-xl transition-all duration-200 text-sm"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                      Creating account...
+                    </>
+                  ) : (
+                    <>
+                      Create Account
+                      <ArrowRight className="ml-2 h-3 w-3" />
+                    </>
+                  )}
+                </Button>
+              </motion.div>
+
+              {/* Artistic sign-in section */}
+              <motion.div variants={itemVariants} className="relative pt-2">
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-16 flex justify-center gap-1">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="w-0.5 h-0.5 rounded-full bg-[#B8915C]/30" />
+                  ))}
+                </div>
+                <div className="mt-3 flex items-center justify-center gap-1">
+                  <span className="text-xs text-[#5A534A]">Already have an account?</span>
+                  <Link
+                    href="/login"
+                    className="group relative inline-flex items-center gap-1 text-[#B8915C] hover:text-[#9F7A4F] font-medium transition-colors"
+                  >
+                    <span className="text-xs">Sign in</span>
+                    <ArrowRight className="w-3 h-3 transition-transform group-hover:translate-x-0.5" />
                   </Link>
-                </p>
-              </div>
-            </form>
+                </div>
+              </motion.div>
+            </motion.form>
           </div>
         </div>
-      </div>
+      </motion.div>
+
+      {/* Custom keyframes for blob animation */}
+      <style jsx>{`
+        @keyframes blob {
+          0% { transform: translate(0px, 0px) scale(1); }
+          33% { transform: translate(30px, -50px) scale(1.1); }
+          66% { transform: translate(-20px, 20px) scale(0.9); }
+          100% { transform: translate(0px, 0px) scale(1); }
+        }
+        .animate-blob {
+          animation: blob 10s infinite;
+        }
+        .animation-delay-2000 {
+          animation-delay: 2s;
+        }
+        .animation-delay-4000 {
+          animation-delay: 4s;
+        }
+      `}</style>
     </div>
   );
 }
