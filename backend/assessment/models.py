@@ -6,7 +6,7 @@ import enum
 
 class QuestionType(str, enum.Enum):
     MCQ = "mcq"
-    DSA = "dsa"
+    CODING = "coding"
 
 class Assessment(Base):
     __tablename__ = "assessments"
@@ -31,7 +31,7 @@ class Assessment(Base):
     
 
 class AssessmentQuestion(Base):
-    """Questions for assessment - supports both MCQ and DSA coding questions"""
+    """Questions for assessment - supports both MCQ and coding questions"""
     __tablename__ = "assessment_questions"
     
     id = Column(Integer, primary_key=True, index=True)
@@ -44,7 +44,7 @@ class AssessmentQuestion(Base):
     question_text = Column(Text, nullable=False)
     topic = Column(String, nullable=True)
     difficulty = Column(String, nullable=True)
-    marks = Column(Integer, nullable=False, default=4)  # 4 for MCQ, 30 for DSA
+    marks = Column(Integer, nullable=False, default=4)  # 4 for MCQ, 60 for coding
     
     # MCQ-specific fields
     option_a = Column(String, nullable=True)
@@ -54,13 +54,14 @@ class AssessmentQuestion(Base):
     correct_option = Column(String, nullable=True)  # A, B, C, or D
     explanation = Column(Text, nullable=True)
     
-    # DSA-specific fields
+    # Coding-specific fields
     example_input = Column(Text, nullable=True)
     example_output = Column(Text, nullable=True)
     test_cases = Column(JSON, nullable=True)  # [{"input": "...", "output": "..."}]
     expected_time_complexity = Column(String, nullable=True)  # e.g., "O(n)"
     expected_space_complexity = Column(String, nullable=True)  # e.g., "O(1)"
     constraints = Column(Text, nullable=True)
+    expected_function_signature = Column(Text, nullable=True)
     
     created_at = Column(DateTime, default=datetime.utcnow)
     
@@ -91,7 +92,7 @@ class AssessmentAnswer(Base):
 
 
 class CodeSubmission(Base):
-    """Candidate's code submissions for DSA questions"""
+    """Candidate's code submissions for coding questions"""
     __tablename__ = "code_submissions"
     
     id = Column(Integer, primary_key=True, index=True)

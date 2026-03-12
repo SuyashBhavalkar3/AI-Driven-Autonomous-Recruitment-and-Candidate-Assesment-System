@@ -195,7 +195,7 @@ export interface AssessmentMCQQuestion {
   marks: number;
 }
 
-export interface AssessmentDSAQuestion {
+export interface AssessmentCodingQuestion {
   id: number;
   question_text: string;
   topic?: string | null;
@@ -205,6 +205,7 @@ export interface AssessmentDSAQuestion {
   expected_time_complexity?: string | null;
   expected_space_complexity?: string | null;
   constraints?: string | null;
+  expected_function_signature?: string | null;
   marks: number;
 }
 
@@ -212,7 +213,7 @@ export interface AssessmentStartResponse {
   id: number;
   application_id: number;
   mcq_questions: AssessmentMCQQuestion[];
-  dsa_questions: AssessmentDSAQuestion[];
+  coding_questions: AssessmentCodingQuestion[];
   started_at?: string | null;
   completed: boolean;
 }
@@ -222,7 +223,7 @@ export interface AssessmentSubmitRequest {
     question_id: number;
     selected_option: string;
   }>;
-  dsa_submissions: Array<{
+  coding_submissions: Array<{
     question_id: number;
     code: string;
     language: string;
@@ -234,12 +235,12 @@ export interface AssessmentSubmitResponse {
   id: number;
   application_id: number;
   mcq_score: number;
-  dsa_score: number;
+  coding_score: number;
   total_score: number;
   mcq_correct: number;
   total_mcq: number;
-  dsa_test_cases_passed: number;
-  total_dsa_test_cases: number;
+  coding_test_cases_passed: number;
+  total_coding_test_cases: number;
   qualifies_for_interview: boolean;
   next_status?: string | null;
   completed_at?: string | null;

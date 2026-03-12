@@ -19,8 +19,8 @@ class MCQQuestionResponse(BaseModel):
         from_attributes = True
 
 
-class DSAQuestionResponse(BaseModel):
-    """DSA coding question response"""
+class CodingQuestionResponse(BaseModel):
+    """Coding question response"""
     id: int
     question_text: str
     topic: Optional[str] = None
@@ -30,7 +30,8 @@ class DSAQuestionResponse(BaseModel):
     expected_time_complexity: Optional[str] = None
     expected_space_complexity: Optional[str] = None
     constraints: Optional[str] = None
-    marks: int = 30
+    expected_function_signature: Optional[str] = None
+    marks: int = 60
     
     class Config:
         from_attributes = True
@@ -41,7 +42,7 @@ class AssessmentStartResponse(BaseModel):
     id: int
     application_id: int
     mcq_questions: List[MCQQuestionResponse]
-    dsa_questions: List[DSAQuestionResponse]
+    coding_questions: List[CodingQuestionResponse]
     started_at: Optional[datetime] = None
     completed: bool
     
@@ -55,17 +56,17 @@ class MCQAnswerSubmission(BaseModel):
     selected_option: str  # A, B, C, or D
 
 
-class DSACodeSubmission(BaseModel):
-    """Single DSA code submission"""
+class CodingSubmission(BaseModel):
+    """Single coding submission"""
     question_id: int
     code: str
     language: str = "python3"  # python3, java, cpp17, etc.
 
 
 class SubmitAssessmentRequest(BaseModel):
-    """Submit both MCQ answers and DSA code"""
+    """Submit both MCQ answers and coding submissions"""
     mcq_answers: List[MCQAnswerSubmission]
-    dsa_submissions: List[DSACodeSubmission]
+    coding_submissions: List[CodingSubmission]
     forced_by_violation: bool = False
 
 
@@ -74,12 +75,12 @@ class AssessmentResultResponse(BaseModel):
     id: int
     application_id: int
     mcq_score: int  # Out of 40
-    dsa_score: int  # Out of 60
+    coding_score: int  # Out of 60
     total_score: int  # Out of 100
     mcq_correct: int
     total_mcq: int
-    dsa_test_cases_passed: int
-    total_dsa_test_cases: int
+    coding_test_cases_passed: int
+    total_coding_test_cases: int
     qualifies_for_interview: bool = False
     next_status: Optional[str] = None
     completed_at: Optional[datetime] = None
@@ -101,8 +102,8 @@ class MCQAnswerDetail(BaseModel):
         from_attributes = True
 
 
-class DSASubmissionDetail(BaseModel):
-    """Detailed DSA submission with results"""
+class CodingSubmissionDetail(BaseModel):
+    """Detailed coding submission with results"""
     question_id: int
     question_text: str
     code: str
@@ -119,11 +120,11 @@ class DSASubmissionDetail(BaseModel):
 class AssessmentFeedbackResponse(BaseModel):
     """Detailed feedback after assessment completion"""
     mcq_score: int
-    dsa_score: int
+    coding_score: int
     total_score: int
     passed: bool
     mcq_answers: List[MCQAnswerDetail]
-    dsa_submissions: List[DSASubmissionDetail]
+    coding_submissions: List[CodingSubmissionDetail]
     
     class Config:
         from_attributes = True

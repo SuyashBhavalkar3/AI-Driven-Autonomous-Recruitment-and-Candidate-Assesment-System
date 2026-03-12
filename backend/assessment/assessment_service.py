@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 MCQ_PROMPT_TEMPLATE = """
-You are an expert technical recruiter and assessment designer. Your task is to generate 10 multiple choice technical questions based on a candidate's resume and job requirements.
+You are an expert technical recruiter and assessment designer. Your task is to generate 4 multiple choice technical questions based on a candidate's resume and job requirements.
 
 IMPORTANT: Generate questions in valid JSON format ONLY. Do not include any text outside the JSON structure.
 
@@ -24,7 +24,7 @@ Job Requirements:
 - Experience Required: {experience_required} years
 - Job Description: {job_description}
 
-Generate 10 MCQ technical questions that test industry-relevant concepts:
+Generate 4 MCQ technical questions that test industry-relevant concepts:
 1. Backend development (REST APIs, microservices, authentication)
 2. Databases (SQL, NoSQL, indexing, transactions)
 3. Distributed systems (caching, load balancing, message queues)
@@ -74,39 +74,39 @@ Important: Return ONLY valid JSON. No additional text, no markdown code blocks, 
 async def generate_assessment_questions(
     parsed_resume: Dict[str, Any],
     job_data: Dict[str, Any],
-    num_mcq: int = 10,
-    num_dsa: int = 2
+    num_mcq: int = 4,
+    num_coding: int = 1
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
-    Generate both MCQ and DSA questions for assessment.
+    Generate both MCQ and coding questions for assessment.
     
     Args:
         parsed_resume: Candidate's parsed resume data
         job_data: Job description and requirements
-        num_mcq: Number of MCQ questions (default: 10)
-        num_dsa: Number of DSA questions (default: 2)
+        num_mcq: Number of MCQ questions (default: 4)
+        num_coding: Number of coding questions (default: 1)
     
     Returns:
-        Dictionary with 'mcq_questions' and 'dsa_questions' lists
+        Dictionary with 'mcq_questions' and 'coding_questions' lists
     """
     
     # Generate MCQ questions
     mcq_questions = await generate_mcq_questions(parsed_resume, job_data, num_mcq)
     
-    # Generate DSA questions
-    from assessment.dsa_service import generate_dsa_questions
-    dsa_questions = await generate_dsa_questions(parsed_resume, job_data, num_dsa)
+    # Generate coding questions
+    from assessment.dsa_service import generate_coding_questions
+    coding_questions = await generate_coding_questions(parsed_resume, job_data, num_coding)
     
     return {
         "mcq_questions": mcq_questions,
-        "dsa_questions": dsa_questions
+        "coding_questions": coding_questions
     }
 
 
 async def generate_mcq_questions(
     parsed_resume: Dict[str, Any],
     job_data: Dict[str, Any],
-    num_questions: int = 10
+    num_questions: int = 4
 ) -> List[Dict[str, Any]]:
     """
     Generate MCQ assessment questions based on candidate resume and job requirements.

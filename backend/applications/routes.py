@@ -1,4 +1,5 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+import json
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
 from datetime import datetime, timedelta
@@ -25,6 +26,14 @@ RESUME_SCORE_THRESHOLD = 10  # Lowered for testing so the full candidate flow ca
 ASSESSMENT_VALIDITY_HOURS = 72
 
 router = APIRouter(prefix="/v1/applications", tags=["Applications"], dependencies=[Depends(rate_limiter)])
+
+
+def _serialize_test_cases(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return json.dumps(value)
 
 
 def compile_candidate_resume_data(candidate_id: int, db: Session) -> Dict[str, Any]:
@@ -122,7 +131,7 @@ async def apply_for_job(
     1. Create application record
     2. Analyze resume against job description
     3. Save resume_score and resume_analysis to database
-    4. If score >= threshold, generate 10 MCQ + 2 DSA questions
+    4. If score >= threshold, generate 4 MCQ + 1 coding question
     5. Update application status
     """
     
@@ -240,70 +249,75 @@ async def apply_for_job(
         logger.info(f"Score {resume_score} >= threshold {RESUME_SCORE_THRESHOLD}. Generating assessment questions...")
         
         try:
-            # Generate both MCQ and DSA questions
+            # Generate the fixed assessment structure: 4 MCQ + 1 coding question
             questions_data = await generate_assessment_questions(
                 parsed_resume=resume_data,
                 job_data=job_data,
-                num_mcq=10,  # 10 MCQ questions (4 marks each = 40 marks)
-                num_dsa=2   # 2 DSA questions (30 marks each = 60 marks)
+                num_mcq=4,   # 4 MCQ questions (10 marks each = 40 marks)
+                num_coding=1 # 1 coding question (60 marks)
             )
             
             mcq_questions = questions_data.get("mcq_questions", [])
-            dsa_questions = questions_data.get("dsa_questions", [])
+            coding_questions = questions_data.get("coding_questions", [])
             
-            if (len(mcq_questions) > 0 or len(dsa_questions) > 0):
-                # Create assessment record
-                assessment = Assessment(
-                    application_id=new_application.id
-                )
-                db.add(assessment)
-                db.flush()  # Get the assessment ID
-                
-                # Store MCQ questions
-                for question_data in mcq_questions:
-                    question = AssessmentQuestion(
-                        assessment_id=assessment.id,
-                        question_type=QuestionType.MCQ,
-                        question_text=question_data.get('question_text'),
-                        option_a=question_data.get('option_a'),
-                        option_b=question_data.get('option_b'),
-                        option_c=question_data.get('option_c'),
-                        option_d=question_data.get('option_d'),
-                        correct_option=question_data.get('correct_option'),
-                        topic=question_data.get('topic'),
-                        difficulty=question_data.get('difficulty'),
-                        explanation=question_data.get('explanation'),
-                        marks=4  # Each MCQ is worth 4 marks
+            if (len(mcq_questions) > 0 or len(coding_questions) > 0):
+                try:
+                    # Create assessment record
+                    assessment = Assessment(
+                        application_id=new_application.id
                     )
-                    db.add(question)
-                
-                # Store DSA questions
-                for question_data in dsa_questions:
-                    question = AssessmentQuestion(
-                        assessment_id=assessment.id,
-                        question_type=QuestionType.DSA,
-                        question_text=question_data.get('question_text'),
-                        topic=question_data.get('topic'),
-                        difficulty=question_data.get('difficulty'),
-                        example_input=question_data.get('example_input'),
-                        example_output=question_data.get('example_output'),
-                        test_cases=question_data.get('test_cases'),
-                        expected_time_complexity=question_data.get('expected_time_complexity'),
-                        expected_space_complexity=question_data.get('expected_space_complexity'),
-                        constraints=question_data.get('constraints'),
-                        marks=30  # Each DSA question is worth 30 marks
-                    )
-                    db.add(question)
-                
-                # Mark assessment availability window once the candidate passes resume screening.
-                new_application.status = ApplicationStatus.ASSESSMENT_SCHEDULED
-                available_at = datetime.utcnow()
-                new_application.assessment_available_at = available_at
-                new_application.assessment_expires_at = available_at + timedelta(hours=ASSESSMENT_VALIDITY_HOURS)
-                db.commit()
-                db.refresh(new_application)
-                
-                logger.info(f"Successfully generated {len(mcq_questions)} MCQ and {len(dsa_questions)} DSA questions for application {new_application.id}")
+                    db.add(assessment)
+                    db.flush()  # Get the assessment ID
+                    
+                    # Store MCQ questions
+                    for question_data in mcq_questions:
+                        question = AssessmentQuestion(
+                            assessment_id=assessment.id,
+                            question_type=QuestionType.MCQ,
+                            question_text=question_data.get('question_text'),
+                            option_a=question_data.get('option_a'),
+                            option_b=question_data.get('option_b'),
+                            option_c=question_data.get('option_c'),
+                            option_d=question_data.get('option_d'),
+                            correct_option=question_data.get('correct_option'),
+                            topic=question_data.get('topic'),
+                            difficulty=question_data.get('difficulty'),
+                            explanation=question_data.get('explanation'),
+                            marks=10  # Each MCQ is worth 10 marks
+                        )
+                        db.add(question)
+                    
+                    # Store coding questions
+                    for question_data in coding_questions:
+                        question = AssessmentQuestion(
+                            assessment_id=assessment.id,
+                            question_type=QuestionType.CODING,
+                            question_text=question_data.get('question_text'),
+                            topic=question_data.get('topic'),
+                            difficulty=question_data.get('difficulty'),
+                            example_input=question_data.get('example_input'),
+                            example_output=question_data.get('example_output'),
+                            test_cases=_serialize_test_cases(question_data.get('test_cases')),
+                            expected_time_complexity=question_data.get('expected_time_complexity'),
+                            expected_space_complexity=question_data.get('expected_space_complexity'),
+                            constraints=question_data.get('constraints'),
+                            expected_function_signature=question_data.get('expected_function_signature'),
+                            marks=60  # The coding question is worth 60 marks
+                        )
+                        db.add(question)
+                    
+                    # Mark assessment availability window once the candidate passes resume screening.
+                    new_application.status = ApplicationStatus.ASSESSMENT_SCHEDULED
+                    available_at = datetime.utcnow()
+                    new_application.assessment_available_at = available_at
+                    new_application.assessment_expires_at = available_at + timedelta(hours=ASSESSMENT_VALIDITY_HOURS)
+                    db.commit()
+                    db.refresh(new_application)
+                    
+                    logger.info(f"Successfully generated {len(mcq_questions)} MCQ and {len(coding_questions)} coding questions for application {new_application.id}")
+                except Exception:
+                    db.rollback()
+                    raise
             else:
                 logger.warning(f"No questions generated for application {new_application.id}. Keeping RESUME_SCREENED status.")
                 

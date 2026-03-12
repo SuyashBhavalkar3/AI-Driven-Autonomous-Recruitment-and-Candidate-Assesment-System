@@ -259,7 +259,7 @@ def _build_report_context(
     transcript = list(application.interview_transcript or [])
 
     mcq_score = float(assessment.mcq_score or 0) if assessment else 0.0
-    dsa_score = float(assessment.dsa_score or 0) if assessment else 0.0
+    coding_score = float(assessment.dsa_score or 0) if assessment else 0.0
     total_score = float(application.assessment_score or 0)
     correct_answers = 0
     total_mcq = 0
@@ -309,7 +309,7 @@ def _build_report_context(
     section_times = assessment_data.get(
         "time_spent_by_section",
         {"MCQ": max(1, int(assessment_duration_minutes * 0.4)) if assessment_duration_minutes else 20,
-         "DSA": max(1, int(assessment_duration_minutes * 0.6)) if assessment_duration_minutes else 40},
+         "Coding": max(1, int(assessment_duration_minutes * 0.6)) if assessment_duration_minutes else 40},
     )
 
     llm_context = {
@@ -317,7 +317,7 @@ def _build_report_context(
         "job_title": application.job.title if application.job else f"Job #{application.job_id}",
         "application_id": application.id,
         "assessment_score": total_score,
-        "assessment_breakdown": {"mcq": mcq_score, "dsa": dsa_score, "accuracy_percent": accuracy_percent},
+        "assessment_breakdown": {"mcq": mcq_score, "coding": coding_score, "accuracy_percent": accuracy_percent},
         "assessment_violations": assessment_violations,
         "interview_status": interview_feedback.get("ai_interview_status", "completed"),
         "interview_summary_source": interview_feedback,
@@ -326,7 +326,7 @@ def _build_report_context(
     llm_summary = stored_llm_summary or _generate_llm_summary(llm_context)
 
     charts = {
-        "section_scores": _build_bar_chart(["MCQ", "DSA", "Total"], [mcq_score, dsa_score, total_score], "Assessment Section Scores"),
+        "section_scores": _build_bar_chart(["MCQ", "Coding", "Total"], [mcq_score, coding_score, total_score], "Assessment Section Scores"),
         "accuracy": _build_pie_chart(
             [correct_answers, max(total_mcq - correct_answers, 0)] if total_mcq else [1],
             ["Correct", "Incorrect"] if total_mcq else ["No MCQ Data"],
@@ -345,7 +345,7 @@ def _build_report_context(
         "interview_transcript": transcript,
         "charts": charts,
         "chart_metadata": {
-            "section_scores": ["MCQ", "DSA", "Total"],
+            "section_scores": ["MCQ", "Coding", "Total"],
             "skill_ratings": skill_ratings,
             "topic_coverage": topic_coverage,
         },
@@ -389,7 +389,7 @@ def build_report_response_payload(db: Session, report: CandidateReport) -> Dict[
 
     section_scores = {
         "MCQ": round(float(context["assessment"].mcq_score or 0), 1) if context["assessment"] else 0.0,
-        "DSA": round(float(context["assessment"].dsa_score or 0), 1) if context["assessment"] else 0.0,
+        "Coding": round(float(context["assessment"].dsa_score or 0), 1) if context["assessment"] else 0.0,
         "Total": round(float(application.assessment_score or 0), 1),
     }
     time_spent_by_section = {
@@ -400,7 +400,7 @@ def build_report_response_payload(db: Session, report: CandidateReport) -> Dict[
                 "MCQ": max(1, int(render_context["assessment_duration_minutes"] * 0.4))
                 if render_context["assessment_duration_minutes"]
                 else 20,
-                "DSA": max(1, int(render_context["assessment_duration_minutes"] * 0.6))
+                "Coding": max(1, int(render_context["assessment_duration_minutes"] * 0.6))
                 if render_context["assessment_duration_minutes"]
                 else 40,
             }

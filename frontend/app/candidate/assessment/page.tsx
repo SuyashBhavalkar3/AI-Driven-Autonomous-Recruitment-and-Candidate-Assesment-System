@@ -19,7 +19,7 @@ import {
 import {
   applicationsAPI,
   assessmentAPI,
-  AssessmentDSAQuestion,
+  AssessmentCodingQuestion,
   AssessmentMCQQuestion,
   AssessmentSubmitResponse,
   profileAPI,
@@ -50,12 +50,15 @@ type AssessmentQuestion =
       starterCode: string;
     };
 
-const buildCodingPrompt = (question: AssessmentDSAQuestion) => {
+const buildCodingPrompt = (question: AssessmentCodingQuestion) => {
   const details = [
     question.question_text,
     question.example_input ? `Example input: ${question.example_input}` : null,
     question.example_output ? `Example output: ${question.example_output}` : null,
     question.constraints ? `Constraints: ${question.constraints}` : null,
+    question.expected_function_signature
+      ? `Expected function signature: ${question.expected_function_signature}`
+      : null,
     question.expected_time_complexity
       ? `Expected time complexity: ${question.expected_time_complexity}`
       : null,
@@ -69,7 +72,7 @@ const buildCodingPrompt = (question: AssessmentDSAQuestion) => {
 
 const normalizeQuestions = (
   mcqQuestions: AssessmentMCQQuestion[],
-  dsaQuestions: AssessmentDSAQuestion[]
+  codingQuestions: AssessmentCodingQuestion[]
 ): AssessmentQuestion[] => {
   const normalizedMcq: AssessmentQuestion[] = mcqQuestions.map((question, index) => ({
     id: question.id,
@@ -85,7 +88,7 @@ const normalizeQuestions = (
     ],
   }));
 
-  const normalizedCoding: AssessmentQuestion[] = dsaQuestions.map((question, index) => ({
+  const normalizedCoding: AssessmentQuestion[] = codingQuestions.map((question, index) => ({
     id: question.id,
     type: "coding",
     title: question.topic || `Coding Question ${index + 1}`,
@@ -288,7 +291,7 @@ export default function AssessmentPage() {
       const response = await assessmentAPI.startAssessment(applicationId);
       const normalizedQuestions = normalizeQuestions(
         response.mcq_questions,
-        response.dsa_questions
+        response.coding_questions
       );
 
       setAssessmentQuestions(normalizedQuestions);
@@ -321,7 +324,7 @@ export default function AssessmentPage() {
           selected_option: ["A", "B", "C", "D"][Number(answers[question.id] ?? 0)] || "A",
         }));
 
-      const dsa_submissions = questions
+      const coding_submissions = questions
         .filter((item): item is Extract<AssessmentQuestion, { type: "coding" }> => item.type === "coding")
         .map((question) => ({
           question_id: question.id,
@@ -331,7 +334,7 @@ export default function AssessmentPage() {
 
       const result = await assessmentAPI.submitAssessment(applicationId, {
         mcq_answers,
-        dsa_submissions,
+        coding_submissions,
         forced_by_violation: forcedByViolation,
       });
 

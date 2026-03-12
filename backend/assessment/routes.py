@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+import json
 from sqlalchemy.orm import Session
 from authentication.database import get_db
 from authentication.utils import get_current_user
@@ -8,14 +9,14 @@ from assessment.models import Assessment, AssessmentQuestion, AssessmentAnswer, 
 from assessment.schemas import (
     AssessmentStartResponse,
     MCQQuestionResponse,
-    DSAQuestionResponse,
+    CodingQuestionResponse,
     SubmitAssessmentRequest,
     AssessmentResultResponse,
     AssessmentFeedbackResponse,
     MCQAnswerDetail,
-    DSASubmissionDetail
+    CodingSubmissionDetail
 )
-from assessment.dsa_service import evaluate_dsa_submission
+from assessment.dsa_service import evaluate_coding_submission
 from middleware.rate_limiter import rate_limiter
 from datetime import datetime
 import logging
@@ -27,6 +28,17 @@ ASSESSMENT_VIOLATION_STATUS = "auto_submitted_violation"
 router = APIRouter(prefix="/v1/assessment", tags=["Assessment"], dependencies=[Depends(rate_limiter)])
 
 
+def _deserialize_test_cases(value):
+    if value is None:
+        return []
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return []
+    return value
+
+
 async def _start_assessment(
     application_id: int,
     current_user: User = Depends(get_current_user),
@@ -36,8 +48,8 @@ async def _start_assessment(
     Start assessment for a candidate.
     
     Returns:
-    - 10 MCQ questions (4 marks each = 40 marks total)
-    - 2 DSA coding questions (30 marks each = 60 marks total)
+    - 4 MCQ questions (10 marks each = 40 marks total)
+    - 1 coding question (60 marks total)
     
     Correct answers are NOT included.
     """
@@ -122,14 +134,14 @@ async def _start_assessment(
         for q in mcq_questions_db
     ]
     
-    # Fetch DSA questions
-    dsa_questions_db = db.query(AssessmentQuestion).filter(
+    # Fetch coding questions
+    coding_questions_db = db.query(AssessmentQuestion).filter(
         AssessmentQuestion.assessment_id == assessment.id,
-        AssessmentQuestion.question_type == QuestionType.DSA
+        AssessmentQuestion.question_type == QuestionType.CODING
     ).all()
     
-    dsa_questions = [
-        DSAQuestionResponse(
+    coding_questions = [
+        CodingQuestionResponse(
             id=q.id,
             question_text=q.question_text,
             topic=q.topic,
@@ -139,16 +151,17 @@ async def _start_assessment(
             expected_time_complexity=q.expected_time_complexity,
             expected_space_complexity=q.expected_space_complexity,
             constraints=q.constraints,
+            expected_function_signature=q.expected_function_signature,
             marks=q.marks
         )
-        for q in dsa_questions_db
+        for q in coding_questions_db
     ]
     
     return AssessmentStartResponse(
         id=assessment.id,
         application_id=assessment.application_id,
         mcq_questions=mcq_questions,
-        dsa_questions=dsa_questions,
+        coding_questions=coding_questions,
         started_at=assessment.started_at,
         completed=assessment.completed
     )
@@ -184,8 +197,8 @@ async def submit_assessment(
     
     Workflow:
     1. Evaluate MCQ answers (4 marks each)
-    2. Execute and evaluate DSA code (30 marks each)
-    3. Calculate total score (MCQ + DSA)
+    2. Execute and evaluate coding submission (60 marks)
+    3. Calculate total score (MCQ + coding)
     4. Update assessment and application
     """
     
@@ -229,11 +242,11 @@ async def submit_assessment(
         
         # Check if answer is correct
         is_correct = answer_data.selected_option == question.correct_option
-        marks_obtained = 4 if is_correct else 0
+        marks_obtained = 10 if is_correct else 0
         
         if is_correct:
             mcq_correct += 1
-            mcq_score += 4
+            mcq_score += 10
         
         # Store the answer
         answer_record = AssessmentAnswer(
@@ -247,24 +260,24 @@ async def submit_assessment(
     
     logger.info(f"MCQ evaluation: {mcq_correct}/{total_mcq} correct, Score: {mcq_score}/40")
     
-    # ===== EVALUATE DSA CODE SUBMISSIONS =====
-    dsa_score = 0
-    total_dsa_test_cases = 0
-    dsa_test_cases_passed = 0
+    # ===== EVALUATE CODING SUBMISSIONS =====
+    coding_score = 0
+    total_coding_test_cases = 0
+    coding_test_cases_passed = 0
     
-    for code_data in submission.dsa_submissions:
+    for code_data in submission.coding_submissions:
         question = db.query(AssessmentQuestion).filter(
             AssessmentQuestion.id == code_data.question_id,
             AssessmentQuestion.assessment_id == assessment.id,
-            AssessmentQuestion.question_type == QuestionType.DSA
+            AssessmentQuestion.question_type == QuestionType.CODING
         ).first()
         
         if not question:
-            raise HTTPException(status_code=400, detail=f"DSA question {code_data.question_id} not found")
+            raise HTTPException(status_code=400, detail=f"Coding question {code_data.question_id} not found")
         
         # Execute and evaluate code
-        test_cases = question.test_cases or []
-        evaluation = await evaluate_dsa_submission(
+        test_cases = _deserialize_test_cases(question.test_cases)
+        evaluation = await evaluate_coding_submission(
             code=code_data.code,
             language=code_data.language,
             test_cases=test_cases,
@@ -272,10 +285,10 @@ async def submit_assessment(
         )
         
         marks_obtained = evaluation["marks_obtained"]
-        dsa_score += marks_obtained
+        coding_score += marks_obtained
         
-        total_dsa_test_cases += evaluation["total_test_cases"]
-        dsa_test_cases_passed += evaluation["test_cases_passed"]
+        total_coding_test_cases += evaluation["total_test_cases"]
+        coding_test_cases_passed += evaluation["test_cases_passed"]
         
         # Store code submission
         code_submission = CodeSubmission(
@@ -291,14 +304,14 @@ async def submit_assessment(
         )
         db.add(code_submission)
     
-    logger.info(f"DSA evaluation: {dsa_test_cases_passed}/{total_dsa_test_cases} test cases passed, Score: {dsa_score}/60")
+    logger.info(f"Coding evaluation: {coding_test_cases_passed}/{total_coding_test_cases} test cases passed, Score: {coding_score}/60")
     
     # ===== CALCULATE TOTAL SCORE =====
-    total_score = mcq_score + dsa_score
+    total_score = mcq_score + coding_score
     
     # Update assessment
     assessment.mcq_score = mcq_score
-    assessment.dsa_score = dsa_score
+    assessment.dsa_score = coding_score
     assessment.total_score = total_score
     assessment.completed = True
     assessment.completed_at = datetime.utcnow()
@@ -324,18 +337,18 @@ async def submit_assessment(
     db.commit()
     db.refresh(assessment)
     
-    logger.info(f"Assessment {assessment.id} completed. MCQ: {mcq_score}/40, DSA: {dsa_score}/60, Total: {total_score}/100")
+    logger.info(f"Assessment {assessment.id} completed. MCQ: {mcq_score}/40, Coding: {coding_score}/60, Total: {total_score}/100")
     
     return AssessmentResultResponse(
         id=assessment.id,
         application_id=assessment.application_id,
         mcq_score=mcq_score,
-        dsa_score=dsa_score,
+        coding_score=coding_score,
         total_score=total_score,
         mcq_correct=mcq_correct,
         total_mcq=total_mcq,
-        dsa_test_cases_passed=dsa_test_cases_passed,
-        total_dsa_test_cases=total_dsa_test_cases,
+        coding_test_cases_passed=coding_test_cases_passed,
+        total_coding_test_cases=total_coding_test_cases,
         qualifies_for_interview=qualifies_for_interview,
         next_status=application.status.value,
         completed_at=assessment.completed_at
@@ -353,7 +366,7 @@ async def get_assessment_result(
     
     Returns:
     - MCQ answers with correct/incorrect status
-    - DSA submissions with test case results
+    - coding submissions with test case results
     - Overall score breakdown
     """
     
@@ -399,16 +412,16 @@ async def get_assessment_result(
             )
         )
     
-    # Get DSA submissions
-    dsa_submissions_db = db.query(CodeSubmission).filter(
+    # Get coding submissions
+    coding_submissions_db = db.query(CodeSubmission).filter(
         CodeSubmission.assessment_id == assessment.id
     ).all()
     
-    dsa_submissions = []
-    for submission in dsa_submissions_db:
+    coding_submissions = []
+    for submission in coding_submissions_db:
         question = submission.question
-        dsa_submissions.append(
-            DSASubmissionDetail(
+        coding_submissions.append(
+            CodingSubmissionDetail(
                 question_id=submission.question_id,
                 question_text=question.question_text,
                 code=submission.code,
@@ -425,9 +438,9 @@ async def get_assessment_result(
     
     return AssessmentFeedbackResponse(
         mcq_score=assessment.mcq_score or 0,
-        dsa_score=assessment.dsa_score or 0,
+        coding_score=assessment.dsa_score or 0,
         total_score=assessment.total_score or 0,
         passed=passed,
         mcq_answers=mcq_answers,
-        dsa_submissions=dsa_submissions
+        coding_submissions=coding_submissions
     )
