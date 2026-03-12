@@ -333,6 +333,12 @@ export interface RecruitmentStrategyResponse {
   created_at: string;
 }
 
+export interface HRAICommandResponse {
+  message: string;
+  action: string;
+  data?: Array<Record<string, unknown>> | null;
+}
+
 export async function registerUser(data: RegisterData): Promise<UserData> {
   const response = await fetch(`${API_BASE_URL}/v1/auth/register`, {
     method: 'POST',
@@ -620,6 +626,19 @@ export const hrAPI = {
     if (!res.ok) {
       const error = await res.json().catch(() => ({}));
       throw new Error(error.detail || 'Failed to generate recruitment strategy');
+    }
+    return res.json();
+  },
+
+  runAICommand: async (query: string): Promise<HRAICommandResponse> => {
+    const res = await fetch(`${API_BASE_URL}/v1/hr/ai-command`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ query }),
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error.detail || 'Failed to execute HR AI command');
     }
     return res.json();
   },

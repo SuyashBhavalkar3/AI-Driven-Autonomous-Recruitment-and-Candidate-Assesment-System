@@ -21,6 +21,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import ChatAssistant from "@/components/chat/ChatAssistant";
 import { removeAuthToken, logout, getAuthToken } from "@/lib/auth";
 import { getCurrentUser } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -232,6 +233,8 @@ export default function HRLayout({ children }: { children: React.ReactNode }) {
           </AnimatePresence>
         </div>
       </main>
+
+      <ChatAssistant />
     </div>
   );
 }
