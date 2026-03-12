@@ -34,6 +34,7 @@ export type ApplicationStatus =
   | 'assessment_completed'
   | 'interview_scheduled'
   | 'interview_completed'
+  | 'final_review'
   | 'rejected'
   | 'accepted';
 

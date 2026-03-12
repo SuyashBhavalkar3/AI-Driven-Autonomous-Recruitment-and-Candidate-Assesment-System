@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
 from datetime import datetime, timedelta
@@ -13,6 +13,8 @@ from assessment.assessment_service import generate_assessment_questions
 from resume_parsing.models import Candidate
 from candidate_profile.models import Experience, Education, Skill, Project, Certification
 from job_management_module.models import Job
+from notifications.email_service import send_final_review_selected
+from notifications.models import Notification, NotificationType
 from middleware.rate_limiter import rate_limiter
 import logging
 
@@ -469,6 +471,7 @@ def get_application_detail_hr(
 def update_application_status(
     application_id: int,
     update_data: ApplicationUpdate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -489,9 +492,38 @@ def update_application_status(
         application.status = update_data.status
     if update_data.hr_notes:
         application.hr_notes = update_data.hr_notes
+
+    if update_data.status == ApplicationStatus.FINAL_REVIEW:
+        candidate_name = application.user.name if application.user else "Candidate"
+        company_name = (
+            current_user.company_name
+            or (application.job.employer.company_name if application.job and application.job.employer else None)
+            or "HR Team"
+        )
+        notification = Notification(
+            user_id=application.user_id,
+            application_id=application.id,
+            type=NotificationType.APPLICATION_STATUS,
+            title="Advanced to Final Review",
+            message=(
+                f"You have advanced to the final review stage for {application.job.title}. "
+                "Our HR team will review your profile and evaluation report next."
+            ),
+            email_sent=False,
+        )
+        db.add(notification)
     
     db.commit()
     db.refresh(application)
+
+    if update_data.status == ApplicationStatus.FINAL_REVIEW and application.user and application.user.email:
+        background_tasks.add_task(
+            send_final_review_selected,
+            application.user.email,
+            application.user.name or "Candidate",
+            application.job.title if application.job else "the role",
+            current_user.company_name or "HR Team",
+        )
     
     return application
 

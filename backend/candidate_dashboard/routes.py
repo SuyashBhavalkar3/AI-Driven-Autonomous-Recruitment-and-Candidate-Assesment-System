@@ -37,6 +37,7 @@ def get_candidate_stats(
             ApplicationStatus.ASSESSMENT_COMPLETED,
             ApplicationStatus.INTERVIEW_SCHEDULED,
             ApplicationStatus.INTERVIEW_COMPLETED,
+            ApplicationStatus.FINAL_REVIEW,
         ])
     ).count()
 
@@ -110,6 +111,7 @@ def get_activity(
             ApplicationStatus.ASSESSMENT_COMPLETED,
             ApplicationStatus.INTERVIEW_SCHEDULED,
             ApplicationStatus.INTERVIEW_COMPLETED,
+            ApplicationStatus.FINAL_REVIEW,
             ApplicationStatus.ACCEPTED,
         ] or passed_screening:
             screening_status = "passed"

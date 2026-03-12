@@ -11,6 +11,7 @@ class ApplicationStatus(str, enum.Enum):
     ASSESSMENT_COMPLETED = "assessment_completed"
     INTERVIEW_SCHEDULED = "interview_scheduled"
     INTERVIEW_COMPLETED = "interview_completed"
+    FINAL_REVIEW = "final_review"
     REJECTED = "rejected"
     ACCEPTED = "accepted"
 

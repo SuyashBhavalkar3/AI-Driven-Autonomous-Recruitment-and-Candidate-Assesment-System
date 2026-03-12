@@ -39,6 +39,8 @@ const statusConfig: Record<string, string> = {
     "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border-0",
   interview_completed:
     "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border-0",
+  final_review:
+    "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border-0",
   accepted:
     "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border-0",
   rejected: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 border-0",
@@ -83,7 +85,7 @@ export default function ApplicantsPage() {
   const [loading, setLoading] = useState(true);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
-  const [actionLoading, setActionLoading] = useState<"accepted" | "rejected" | null>(null);
+  const [actionLoading, setActionLoading] = useState<"final_review" | "rejected" | null>(null);
   const [reportActionLoading, setReportActionLoading] = useState<"generate" | "download" | null>(null);
   const [selectedReport, setSelectedReport] = useState<CandidateReport | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -241,7 +243,7 @@ export default function ApplicantsPage() {
     }
   };
 
-  const handleStatusUpdate = async (status: "accepted" | "rejected") => {
+  const handleStatusUpdate = async (status: "final_review" | "rejected") => {
     if (!selectedApplicant) {
       return;
     }
@@ -584,11 +586,11 @@ export default function ApplicantsPage() {
 
                 <div className="flex gap-3">
                   <Button
-                    onClick={() => handleStatusUpdate("accepted")}
+                    onClick={() => handleStatusUpdate("final_review")}
                     disabled={actionLoading !== null}
                     className="bg-[#B8915C] hover:bg-[#9F7A4F]"
                   >
-                    Accept
+                    Accept For Final Review
                   </Button>
                   <Button
                     variant="outline"

@@ -3,16 +3,23 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
 from datetime import datetime
+import logging
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_EMAIL = os.getenv("SMTP_EMAIL")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+SMTP_EMAIL = os.getenv("SMTP_EMAIL") or os.getenv("SENDER_MAIL")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD") or os.getenv("SENDER_PASSWORD")
 
 def send_email(to_email: str, subject: str, body: str):
     """Send email notification"""
     if not SMTP_EMAIL or not SMTP_PASSWORD:
-        print(f"Email not configured. Would send: {subject} to {to_email}")
+        logger.warning("Email not configured. Skipping email '%s' to %s", subject, to_email)
         return False
     
     try:
@@ -29,7 +36,7 @@ def send_email(to_email: str, subject: str, body: str):
         server.quit()
         return True
     except Exception as e:
-        print(f"Email error: {e}")
+        logger.exception("Email send failed for %s: %s", to_email, e)
         return False
 
 def send_assessment_scheduled(to_email: str, candidate_name: str, job_title: str, scheduled_time: datetime):
@@ -89,6 +96,44 @@ def send_interview_reminder(to_email: str, candidate_name: str, job_title: str, 
             <p>Your interview for <strong>{job_title}</strong> will start in {minutes_left} minutes.</p>
             <p>Please login now to avoid missing it.</p>
             <p>Best regards,<br>Recruitment Team</p>
+        </body>
+    </html>
+    """
+    return send_email(to_email, subject, body)
+
+
+def send_final_review_selected(
+    to_email: str,
+    candidate_name: str,
+    job_title: str,
+    company_name: str,
+):
+    subject = "Congratulations! You've Advanced to the Final Review Stage"
+    body = f"""
+    <html>
+        <body style="font-family: Arial, sans-serif; color: #2D2A24; line-height: 1.6;">
+            <p>Dear {candidate_name},</p>
+            <p><strong>Congratulations!</strong></p>
+            <p>
+                We are pleased to inform you that you have successfully completed the previous
+                stages of our hiring process for the <strong>{job_title}</strong> role and have
+                been selected to move forward to the <strong>Final Review</strong> stage.
+            </p>
+            <p>
+                Our team was impressed with your performance during the assessment and AI interview.
+            </p>
+            <p><strong>Next Steps:</strong></p>
+            <p>
+                Our HR team will review your profile and evaluation report. If everything aligns,
+                we will reach out to you shortly with further updates regarding the next stage of
+                the hiring process.
+            </p>
+            <p>Thank you for your time and effort throughout the process.</p>
+            <p>
+                Best regards,<br />
+                {company_name}<br />
+                Recruitment Team
+            </p>
         </body>
     </html>
     """
