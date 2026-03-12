@@ -89,6 +89,7 @@ export default function ApplicantsPage() {
   const [reportActionLoading, setReportActionLoading] = useState<"generate" | "download" | null>(null);
   const [selectedReport, setSelectedReport] = useState<CandidateReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -139,6 +140,18 @@ export default function ApplicantsPage() {
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!toastMessage) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setToastMessage(null);
+    }, 3500);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [toastMessage]);
 
   const filteredApplications = useMemo(() => {
     return applications
@@ -249,6 +262,7 @@ export default function ApplicantsPage() {
     }
 
     try {
+      setError(null);
       setActionLoading(status);
       const updated = await hrAPI.updateApplicationStatus(selectedApplicant.id, {
         status,
@@ -263,6 +277,9 @@ export default function ApplicantsPage() {
       setSelectedApplicant((current) =>
         current ? { ...current, ...updated, hr_notes: notes } : current
       );
+      if (status === "final_review") {
+        setToastMessage("Email sent successfully to the candidate.");
+      }
     } catch (updateError) {
       setError(
         updateError instanceof Error
@@ -276,6 +293,15 @@ export default function ApplicantsPage() {
 
   return (
     <div>
+      {toastMessage && (
+        <div className="fixed right-6 top-6 z-[70] max-w-sm rounded-xl border border-emerald-200 bg-white/95 px-4 py-3 shadow-xl backdrop-blur-sm dark:border-emerald-900/40 dark:bg-slate-900/95">
+          <div className="flex items-start gap-3">
+            <CheckCircle className="mt-0.5 h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+            <p className="text-sm font-medium text-[#2D2A24] dark:text-white">{toastMessage}</p>
+          </div>
+        </div>
+      )}
+
       <div className="mb-8">
         <h1 className="flex items-center gap-2 font-serif text-4xl font-medium text-[#2D2A24] dark:text-white">
           Applicants
