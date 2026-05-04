@@ -9,4 +9,7 @@ node_modules
 /backend/.env
 .venv
 .venv/
+*.zip
+*.safetensors
+models/
 backend/.venv
