@@ -44,6 +44,11 @@ Where $B \in \mathbb{R}^{d \times r}$ and $A \in \mathbb{R}^{r \times k}$, and t
 1. **Disentangled Attention:** Instead of adding positional encodings directly to word embeddings, DeBERTa uses two vectors for each word (content and position) and computes attention weights based on their disentangled matrices.
 2. **Enhanced Mask Decoder:** It incorporates absolute positions in the decoding layer.
 
+### Dataset Integration: Kaggle Feedback Prize & ASAP
+To replace generic LLM scoring with scientifically rigorous NLP evaluation, the DeBERTa engine is fine-tuned on Automated Essay Scoring (AES) datasets:
+- **Feedback Prize - English Language Learning:** Scores student essays on cohesion, syntax, vocabulary, phraseology, grammar, and conventions. These specific linguistic metrics are mapped algorithmically to our 8 proprietary soft skills (e.g., Syntax + Grammar → Accountability).
+- **ASAP (Automated Student Assessment Prize):** Used to assess the depth, maturity, and structural logic of the candidate's answers.
+
 ### The Architecture: Multi-Task Learning (MTL)
 In your `MultiTaskDeBERTa` architecture, the model does not just predict one thing. It takes a single input (the interview transcript) and branches off into multiple parallel output heads:
 
