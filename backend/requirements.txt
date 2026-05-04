@@ -1,0 +1,38 @@
+fastapi
+uvicorn[standard]
+SQLAlchemy
+python-multipart
+passlib==1.7.4
+bcrypt==3.2.2
+python-dotenv
+pydantic[email]
+pyJWT
+cloudinary
+groq 
+openai
+pydub
+aiofiles
+websockets
+requests
+gtts
+python-dotenv
+cloudinary 
+pdfminer.six
+python-docx
+weasyprint
+jinja2
+matplotlib==3.8.4
+pillow
+
+# Deep Learning
+torch>=2.1.0
+transformers>=4.38.0
+sentence-transformers>=2.7.0
+sentencepiece>=0.1.99
+accelerate>=0.28.0
+# Experiment tracking
+mlflow>=2.10.0
+# Data augmentation
+nltk>=3.8.0
+# SHAP for bias detection
+shap>=0.44.0
