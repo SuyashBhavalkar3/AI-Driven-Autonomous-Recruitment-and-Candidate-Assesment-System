@@ -34,7 +34,7 @@ class ApplicationResponse(BaseModel):
         from_attributes = True
 
 class ApplicationDetailResponse(ApplicationResponse):
-    interview_transcript: Optional[Dict[str, Any]] = None
+    interview_transcript: Optional[list] = None
     job: Optional[Dict[str, Any]] = None
     
     class Config:

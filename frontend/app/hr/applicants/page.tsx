@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { AlertCircle, CheckCircle, Download, Eye, FileText, Loader2, Search, Sparkles, Target } from "lucide-react";
+import { AlertCircle, CheckCircle, Download, Eye, FileText, Loader2, Search, Sparkles, Target, RefreshCw } from "lucide-react";
 
 import {
   CandidateReport,
@@ -591,6 +591,19 @@ function ApplicantsContent() {
                           >
                             <Download className="mr-2 h-4 w-4" />
                             Download Report
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={handleGenerateReport}
+                            disabled={reportActionLoading !== null}
+                            className="border-[#D6CDC2] text-[#4A443C] hover:bg-[#F1E9E0]"
+                          >
+                            {reportActionLoading === "generate" ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <RefreshCw className="mr-2 h-4 w-4" />
+                            )}
+                            Regenerate
                           </Button>
                         </>
                       ) : (
